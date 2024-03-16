@@ -47,6 +47,13 @@ export function Html({children, title, styles = []}) {
           }
           handleUpdate();
         </script>
+        <script>
+          navigator.serviceWorker.addEventListener("message", ({data}) => {
+            if (data.type === 'SW_CONSOLE') {
+              console.log("SW: " + data.message);
+            }
+          });
+        </script>
       </body>
     </html>
   `

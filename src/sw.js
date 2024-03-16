@@ -1,12 +1,37 @@
 import { html, Router } from 'swtl';
 import { Html } from './pages/Html.js';
+import { Octokit } from "@octokit/rest"
 
 import { set, get } from './vendor/idb-keyval.js';
+
+// FIXME: deletion of database breaks sw
+
+let octokit;
+
+async function getOctokit() {
+  if (octokit) {
+    return octokit;
+  }
+  const token = await get('token');
+  console.log(token);
+  return (octokit = new Octokit({
+    auth: token
+  }));
+}
 
 const router = new Router({
   routes: [
     {
       path: '/login',
+      plugins: [{
+        name: 'auth-plugin',
+        async beforeResponse({url, query, params, request}) {
+          const token = await get('token');
+          if (token) {
+            return Response.redirect('/');
+          }
+        }
+      }],
       render: () => {
         return html`
         <${Html} title="swtl">
@@ -30,6 +55,7 @@ const router = new Router({
               event: 'authorised',
               token
             });
+            location = '/';
           }
           window.addEventListener("message", onMessage);
           </script>
@@ -43,13 +69,22 @@ const router = new Router({
         {
           name: 'auth-plugin',
           async beforeResponse({url, query, params, request}) {
-            consoleToHost('before response')
-            try {
-              const token = await get('token');
-              consoleToHost(token);
-            }
-            catch(e) {
+            console.log('before response')
+            const token = await get('token');
+            if (!token) {
               return Response.redirect('/login')
+            }
+            console.log('here');
+            const octokit = await getOctokit();
+            try {
+              contentFile = await octokit.repos.getContent({
+                owner: 'gryzzly',
+                repo: 'mishareyzlin.com',
+                path: 'content/content.json'
+              });
+              console.log(contentFile)
+            } catch (e) {
+              console.error(e);
             }
           }
         }
@@ -81,13 +116,11 @@ self.addEventListener("install", () => {
 });
 
 function consoleToHost(msg) {
-  clients.claim().then(() => {
-    self.clients.matchAll().then((clients) => {
-      clients.forEach((client) =>
-        client.postMessage({ type: "SW_CONSOLE", message: msg })
-      );
+  self.clients.matchAll().then((clients) => {
+    clients.forEach((client) => {
+      client.postMessage({ type: "SW_CONSOLE", message: msg })
     });
-  })
+  });
 }
 
 self.addEventListener("activate", (event) => {
@@ -110,14 +143,9 @@ self.addEventListener("fetch", (event) => {
 });
 
 
-self.addEventListener("message", async function serviceWorkerOnMessage ({event, data}) {
-  console.log('service worker on message')
+self.addEventListener("message", async function serviceWorkerOnMessage ({data}) {
   if (data.event === 'authorised') {
     await set('token', data.token);
-    self.clients.matchAll().then((clients) => {
-      clients.forEach((client) =>
-        client.postMessage({ type: "SW_CONSOLE", message: 'recorded token in db' })
-      );
-    });
+    await consoleToHost('set token');
   }
 });
