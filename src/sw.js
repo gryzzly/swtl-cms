@@ -24,8 +24,16 @@ import { b64EncodeUnicode, b64DecodeUnicode } from "./utils.js";
 let config = {};
 
 // self.location.pathname is /admin/sw.js, so we remove the filename
-  // to get the containiong directory
+// to get the containing directory
 const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, '');
+
+function escapeHTML(html) {
+  return html.replace(/&/g, '&amp;')
+             .replace(/</g, '&lt;')
+             .replace(/>/g, '&gt;')
+             .replace(/"/g, '&quot;')
+             .replace(/'/g, '&#039;');
+}
 
 
 // FIXME: this selection of the component to render (and its attributes?) needs
@@ -38,7 +46,7 @@ function selectWidget(field, fieldKey, currentItem) {
   const value = currentItem ? currentItem[field.name] : ``;
 
   if (field.widget === "text-editor") {
-    return `<prosemirror-editor id="${fieldKey}" name="${field.name}" html="${value}"></prosemirror-editor>`;
+    return `<prosemirror-editor id="${fieldKey}" name="${field.name}" html="${value ? escapeHTML(value) : ''}"></prosemirror-editor>`;
   }
   if (field.widget === "cloudinary-upload") {
     return `<cloudinary-upload
@@ -194,7 +202,7 @@ const router = new Router({
           </style>
           <a href="${BASEPATH}"><button>Back</button></a>
           <div>
-            <h2>Collection: ${collectionName}</h2>
+            <h2>✎ ${collectionName}</h2>
             <a href="${BASEPATH}/collections/${collectionName}/new"
               ><button>Add to ${collectionConfig.label}</button></a
             >
@@ -260,7 +268,7 @@ const router = new Router({
         const items = content.collections[collectionName] || [];
         const currentItem = items.find(({ id }) => id === params.itemId);
 
-        return html`<${Html} title="editing">
+        return html`<${Html} title="editing" basePath="${BASEPATH}>
           <a href="${BASEPATH}/collections/${collectionName}/"><button>Back</button></a>
           <form
             action="${BASEPATH}/collections/${collectionName}${"/"}${params.itemId}"
@@ -281,6 +289,11 @@ const router = new Router({
               })
               .join("")}
             <input type="submit" />
+            <input 
+              type="submit" 
+              formaction="${BASEPATH}/collections/${collectionName}${"/"}${currentItem.id}/delete" 
+              value="Delete" 
+            />
           </form>
         <//>`;
       },
@@ -328,7 +341,7 @@ self.addEventListener("activate", (event) => {
 // https://github.com/whatwg/urlpattern/issues/14
 // Use {} notation to not "consume" the slash by the param notation
 const collectionsPathPattern = new URLPattern(
-  `${BASEPATH}/collections/:collectionName/{:id}?`,
+  `${BASEPATH}/collections/:collectionName/{:id}?/:action?`,
   self.location.origin,
 );
 
@@ -339,9 +352,11 @@ self.addEventListener("fetch", async (event) => {
     event.request.method === "POST" &&
     (collectionsPathMatch = collectionsPathPattern.exec(event.request.url))
   ) {
+
     event.respondWith(
       (async () => {
         console.log("responding to collectionsPathPattern");
+        const isDeleteAction = (collectionsPathMatch.pathname.groups.action === "delete");
         // Intercept the request and clone it so we can access the body
         const clonedRequest = event.request.clone();
         const formData = await clonedRequest.formData();
@@ -362,18 +377,22 @@ self.addEventListener("fetch", async (event) => {
           ? items.findIndex(({ id }) => id === itemId)
           : items.length;
 
-        debugger;
-
         items[currentItemIndex] = items[currentItemIndex] || {};
 
-        if (!itemId) {
-          // FIXME: use UUID instead of Math.random ;-)
-          items[currentItemIndex].id = `${Math.random()}`;
+        if (isDeleteAction && itemId) {
+          items.splice(currentItemIndex, 1);
         }
 
-        collectionConfig.fields.map((field) => {
-          items[currentItemIndex][field.name] = formData.get(field.name);
-        });
+        if (!isDeleteAction) {
+          if (!itemId) {
+            // FIXME: use UUID instead of Math.random ;-)
+            items[currentItemIndex].id = `${Math.random().toString(36).slice(2, 9)}`;
+          }
+  
+          collectionConfig.fields.map((field) => {
+            items[currentItemIndex][field.name] = formData.get(field.name);
+          });
+        }
 
         content.collections[collectionName] = items;
         // FIXME: writing lastModified is crucial
@@ -388,52 +407,19 @@ self.addEventListener("fetch", async (event) => {
           performance.measure("Saving Content", "save-db", "saved-db").duration,
         );
 
+        if (isDeleteAction) {
+          return Response.redirect(`${BASEPATH}/collections/${collectionName}/`);  
+        }
+
         return Response.redirect(
           itemId
-            ? `${BASEPATH}/${event.request.url}/edit`
-            : `${BASEPATH}/${items[currentItemIndex].id}/edit`,
+            ? `${event.request.url}/edit`
+            : `${BASEPATH}/collections/${collectionName}/${items[currentItemIndex].id}/edit`,
         );
       })(),
     );
     return;
   }
-  // if (
-  //   event.request.method === "POST" &&
-  //   // what should this URL be?
-  //   event.request.url.endsWith("/collections/pages/edit")
-  // ) {
-  //   event.respondWith(
-  //     (async () => {
-  //       // Intercept the request and clone it so we can access the body
-  //       const clonedRequest = event.request.clone();
-  //       const formData = await clonedRequest.formData();
-
-  //       const content = await get("content-json");
-
-  //       const items = content.collections[formData.get("collectionName")];
-  //       const currentItemIndex = items.findIndex(
-  //         ({ id }) => id === formData.get("id"),
-  //       );
-
-  //       for (const entry of formData.entries()) {
-  //         console.log(entry);
-  //         const [name, value] = entry;
-  //         items[currentItemIndex][name] = value;
-  //       }
-
-  //       performance.mark("save-db");
-  //       await set("content-json", JSON.parse(JSON.stringify(content)));
-  //       performance.mark("saved-db");
-  //       console.log(
-  //         "Time it took to save content (ms)",
-  //         performance.measure("Saving Content", "save-db", "saved-db").duration,
-  //       );
-
-  //       return Response.redirect(event.request.url);
-  //     })(),
-  //   );
-  //   return;
-  // }
 });
 
 // after the frontend authorises via Github OAuth, we send the message with a token
