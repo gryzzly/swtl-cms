@@ -13,7 +13,9 @@
         <p>Installing service worker...</p>
         <script>
             /** Here goes the configuration of the CMS */
-            SWTL_CMS_BASE_PATH = "/admin";
+            SWTL_CMS_BASE_PATH = location.pathname.replace(/\/$/, '');
+            SWTL_CMS_GITHUB_USER = 'gryzzly';
+            SWTL_CMS_GITHUB_REPO = 'petya';
         </script>
         <script>
             /**
@@ -25,15 +27,19 @@
              */
             console.log("registering service worker");
             navigator.serviceWorker
-                .register(`.${SWTL_CMS_BASE_PATH}/sw.js`, {
+                .register(`.${window.SWTL_CMS_BASE_PATH}/sw.js`, {
                     scope: window.SWTL_CMS_BASE_PATH + '/'
                 })
                 .then(async (registration) => {
                     // Send the config to the service worker
                     const worker = registration.installing || registration.waiting || registration.active;
                     worker.postMessage({
-                        type: "SWTL_CMS_BASE_PATH",
-                        basePath: window.SWTL_CMS_BASE_PATH
+                        event: "config",
+                        config: {
+                            basePath: window.SWTL_CMS_BASE_PATH,
+                            githubUser: window.SWTL_CMS_GITHUB_USER,
+                            githubRepo: window.SWTL_CMS_GITHUB_REPO,
+                        }
                     });
                     console.log(
                         "Service worker registered successfully",

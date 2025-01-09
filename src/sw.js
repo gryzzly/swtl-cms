@@ -35,6 +35,59 @@ function escapeHTML(html) {
              .replace(/'/g, '&#039;');
 }
 
+function mergeContents(localContent, remoteContent) {
+  // Create new content object
+  const mergedContent = {
+    lastModified: Math.max(localContent.lastModified, remoteContent.lastModified),
+    collections: {},
+    // Track deletions with timestamps { id: timestamp }
+    deletedIds: {
+      ...(localContent.deletedIds || {}),
+      ...(remoteContent.deletedIds || {})
+    }
+  };
+
+  // Clean up old deletions (older than 30 days)
+  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  mergedContent.deletedIds = Object.fromEntries(
+    Object.entries(mergedContent.deletedIds)
+      .filter(([_, timestamp]) => timestamp > thirtyDaysAgo)
+  );
+
+  // Get all collection names from both local and remote
+  const allCollectionNames = new Set([
+    ...Object.keys(localContent.collections || {}),
+    ...Object.keys(remoteContent.collections || {})
+  ]);
+
+  // Merge each collection
+  for (const collectionName of allCollectionNames) {
+    const localItems = localContent.collections[collectionName] || [];
+    const remoteItems = remoteContent.collections[collectionName] || [];
+
+    const itemsMap = new Map();
+
+    // Add all remote items first (if not deleted)
+    remoteItems.forEach(item => {
+      if (!Object.keys(mergedContent.deletedIds).includes(item.id)) {
+        itemsMap.set(item.id, item);
+      }
+    });
+
+    // Add/override with local items (if not deleted)
+    localItems.forEach(item => {
+      if (!Object.keys(mergedContent.deletedIds).includes(item.id)) {
+        itemsMap.set(item.id, item);
+      }
+    });
+
+    // Convert map back to array
+    mergedContent.collections[collectionName] = Array.from(itemsMap.values());
+  }
+
+  return mergedContent;
+}
+
 
 // FIXME: this selection of the component to render (and its attributes?) needs
 // to happen based on the config
@@ -60,6 +113,37 @@ function selectWidget(field, fieldKey, currentItem) {
 }
 
 let octokit;
+
+async function SyncStatus({ children, title, styles = [] }) {
+  const octokit = await getOctokit();
+  const cmsConfig = await get('config');
+  const configFile = await octokit.repos.getContent({
+    owner: cmsConfig.githubUser,
+    repo: cmsConfig.githubRepo,
+    path: GITHUB_CONFIG.paths.config,
+  });
+  const contentFile = await octokit.repos.getContent({
+    owner: cmsConfig.githubUser,
+    repo: cmsConfig.githubRepo,
+    path: GITHUB_CONFIG.paths.content,
+  });
+
+  const remoteContent = JSON.parse(b64DecodeUnicode(contentFile.data.content));
+  const localContent = await get("content-json");
+
+  if (localContent.lastModified > remoteContent.lastModified) {
+    return html`<div>
+      <p style="border: 1px solid; padding: 10px; background: white;">Local content has updates</p>
+      <form action="${BASEPATH}/sync" method="POST">
+        <button type="submit">Sync</button>
+      </form>
+    </div>`;
+  }
+
+  return html`<div>
+    <p style="border: 1px solid; padding: 10px; background: lightgrey;">Local content is synced</p>
+  </div>`;
+}
 
 async function getOctokit() {
   if (octokit) {
@@ -132,11 +216,13 @@ const router = new Router({
               return Response.redirect(`${BASEPATH}/login`);
             }
             const octokit = await getOctokit();
+            const cmsConfig = await get('config');
+
             try {
               const configFile = await octokit.repos.getContent({
-                owner: "gryzzly",
-                repo: "petya",
-                path: "config.json",
+                owner: cmsConfig.githubUser,
+                repo: cmsConfig.githubRepo,
+                path: GITHUB_CONFIG.paths.config,
               });
               await set(
                 "config-json",
@@ -148,22 +234,20 @@ const router = new Router({
             }
             try {
               const contentFile = await octokit.repos.getContent({
-                owner: "gryzzly",
-                repo: "petya",
-                path: "content.json",
+                owner: cmsConfig.githubUser,
+                repo: cmsConfig.githubRepo,
+                path: GITHUB_CONFIG.paths.content,
               });
+              const remoteContent = JSON.parse(b64DecodeUnicode(contentFile.data.content));
               const localContent = await get("content-json");
-              // load from server if lastModified on the server is newer
+              // merge from server if lastModified on the server is newer
               if (
                 !localContent ||
-                localContent.lastModified <
-                  contentFile.data.content.lastModified ||
+                localContent.lastModified < remoteContent.lastModified ||
                 !localContent.lastModified
               ) {
-                await set(
-                  "content-json",
-                  JSON.parse(b64DecodeUnicode(contentFile.data.content)),
-                );
+                const mergedContent = mergeContents(localContent || { collections: {} }, remoteContent);
+                await set("content-json", mergedContent);
               }
             } catch (e) {
               console.error(e);
@@ -176,6 +260,7 @@ const router = new Router({
 
         return html`
           <${Html} title="Start" basePath=${BASEPATH}>
+            <${SyncStatus} />
             ${config.collections.map(({ name, label }) => {
               return `<div><a href="${BASEPATH}/collections/${name}/"><button>${label}</button></a></div>`;
             })}
@@ -201,6 +286,7 @@ const router = new Router({
             }
           </style>
           <a href="${BASEPATH}"><button>Back</button></a>
+          <${SyncStatus} />
           <div>
             <h2>✎ ${collectionName}</h2>
             <a href="${BASEPATH}/collections/${collectionName}/new"
@@ -228,9 +314,9 @@ const router = new Router({
         const collectionConfig = config.collections.find(
           ({ name }) => collectionName === name,
         );
-        debugger;
         return html`<${Html} title="editing" basePath=${BASEPATH}>
           <a href="${BASEPATH}"><button>Back</button></a>
+          <${SyncStatus} />
           <form action="${BASEPATH}/collections/${collectionName}/" method="POST">
             <h2>New item for ${collectionName}</h2>
             ${collectionConfig.fields
@@ -289,10 +375,10 @@ const router = new Router({
               })
               .join("")}
             <input type="submit" />
-            <input 
-              type="submit" 
-              formaction="${BASEPATH}/collections/${collectionName}${"/"}${currentItem.id}/delete" 
-              value="Delete" 
+            <input
+              type="submit"
+              formaction="${BASEPATH}/collections/${collectionName}${"/"}${currentItem.id}/delete"
+              value="Delete"
             />
           </form>
         <//>`;
@@ -345,80 +431,82 @@ const collectionsPathPattern = new URLPattern(
   self.location.origin,
 );
 
+// Add a new pattern for sync endpoint
+const syncPathPattern = new URLPattern(
+  `${BASEPATH}/sync`,
+  self.location.origin,
+);
+
 self.addEventListener("fetch", async (event) => {
   let collectionsPathMatch = null;
+  let syncPathMatch = null;
 
-  if (
-    event.request.method === "POST" &&
-    (collectionsPathMatch = collectionsPathPattern.exec(event.request.url))
-  ) {
+  if (event.request.method === "POST") {
+    console.log('POST request to:', event.request.url);
 
-    event.respondWith(
-      (async () => {
-        console.log("responding to collectionsPathPattern");
-        const isDeleteAction = (collectionsPathMatch.pathname.groups.action === "delete");
-        // Intercept the request and clone it so we can access the body
-        const clonedRequest = event.request.clone();
-        const formData = await clonedRequest.formData();
-        const collectionName =
-          collectionsPathMatch.pathname.groups.collectionName;
-        const itemId = collectionsPathMatch.pathname.groups.id;
-
-        const content = await get("content-json");
-        const config = await get("config-json");
-
-        const collectionConfig = config.collections.find(
-          ({ name }) => collectionName === name,
-        );
-
-        const items = content.collections[collectionName] || [];
-
-        const currentItemIndex = itemId
-          ? items.findIndex(({ id }) => id === itemId)
-          : items.length;
-
-        items[currentItemIndex] = items[currentItemIndex] || {};
-
-        if (isDeleteAction && itemId) {
-          items.splice(currentItemIndex, 1);
-        }
-
-        if (!isDeleteAction) {
-          if (!itemId) {
-            // FIXME: use UUID instead of Math.random ;-)
-            items[currentItemIndex].id = `${Math.random().toString(36).slice(2, 9)}`;
+    if ((syncPathMatch = syncPathPattern.exec(event.request.url))) {
+      console.log('Handling sync request');
+      event.respondWith(
+        (async () => {
+          try {
+            await syncToGithub();
+            // Redirect back to the page they were on
+            return Response.redirect(event.request.referrer || BASEPATH);
+          } catch (error) {
+            console.error('Sync failed:', error);
+            return Response.redirect(`${BASEPATH}?error=sync_failed`);
           }
-  
-          collectionConfig.fields.map((field) => {
-            items[currentItemIndex][field.name] = formData.get(field.name);
-          });
-        }
+        })()
+      );
+      return;
+    }
 
-        content.collections[collectionName] = items;
-        // FIXME: writing lastModified is crucial
-        // perhaps it should happen as a hook to data modifications?
-        content.lastModified = Date.now();
+    if ((collectionsPathMatch = collectionsPathPattern.exec(event.request.url))) {
+      console.log('Handling collections request');
+      event.respondWith(
+        (async () => {
+          const formData = await event.request.formData();
+          const content = await get("content-json");
+          const collectionName = collectionsPathMatch.pathname.groups.collectionName;
+          const itemId = collectionsPathMatch.pathname.groups.id;
+          const isDeleteAction = (collectionsPathMatch.pathname.groups.action === "delete");
 
-        performance.mark("save-db");
-        await set("content-json", JSON.parse(JSON.stringify(content)));
-        performance.mark("saved-db");
-        console.log(
-          "Time it took to save content (ms)",
-          performance.measure("Saving Content", "save-db", "saved-db").duration,
-        );
+          let items = content.collections[collectionName] || [];
+          const currentItemIndex = items.findIndex(({ id }) => id === itemId);
 
-        if (isDeleteAction) {
-          return Response.redirect(`${BASEPATH}/collections/${collectionName}/`);  
-        }
+          if (isDeleteAction && itemId) {
+            items.splice(currentItemIndex, 1);
+            // Track the deletion
+            content.deletedIds = content.deletedIds || {};
+            content.deletedIds[itemId] = Date.now();
+          } else {
+            const item = {
+              id: itemId || `${Math.random().toString(36).slice(2, 9)}`,
+            };
 
-        return Response.redirect(
-          itemId
-            ? `${event.request.url}/edit`
-            : `${BASEPATH}/collections/${collectionName}/${items[currentItemIndex].id}/edit`,
-        );
-      })(),
-    );
-    return;
+            for (const [key, value] of formData.entries()) {
+              item[key] = value;
+            }
+
+            if (currentItemIndex > -1) {
+              items[currentItemIndex] = item;
+            } else {
+              items.push(item);
+            }
+          }
+
+          content.collections[collectionName] = items;
+          content.lastModified = Date.now();
+
+          await set("content-json", content);
+
+          return Response.redirect(
+            `${BASEPATH}/collections/${collectionName}/`,
+          );
+        })()
+      );
+      return;
+    }
   }
 });
 
@@ -426,14 +514,26 @@ self.addEventListener("fetch", async (event) => {
 // to the SW so it can be persisted for the future use
 self.addEventListener(
   "message",
-  async function serviceWorkerOnMessage({ data }) {
+  async function serviceWorkerOnAuthMessage({ data }) {
     if (data.event === "authorised") {
       await set("token", data.token);
     }
   },
 );
 
-// IMPORTANT: 
+// After the service worker is registered, we send a config
+// from html to the service worker to be persisted
+self.addEventListener(
+  "message",
+  async function serviceWorkerOnConfigMessage({ data }) {
+    if (data.event === "config") {
+      await set("config", data.config);
+    }
+  },
+);
+
+
+// IMPORTANT:
 // enable swtl router only after any other own fetch listeners,
 // so that "API" POST requests are handled first
 self.addEventListener("fetch", async (event) => {
@@ -441,3 +541,43 @@ self.addEventListener("fetch", async (event) => {
     event.respondWith(router.handleRequest(event.request));
   }
 });
+
+// Update the sync function to use merging
+async function syncToGithub() {
+  try {
+    const octokit = await getOctokit();
+    const localContent = await get("content-json");
+    const cmsConfig = await get('config');
+
+    // Get current remote content
+    const { data: currentFile } = await octokit.repos.getContent({
+      owner: cmsConfig.githubUser,
+      repo: cmsConfig.githubRepo,
+      path: "content.json",
+    });
+
+    const remoteContent = JSON.parse(b64DecodeUnicode(currentFile.content));
+
+    console.log(remoteContent)
+
+    // Always merge with remote to prevent lost updates
+    const contentToSync = mergeContents(localContent, remoteContent);
+
+    // Upload the merged content
+    await octokit.repos.createOrUpdateFileContents({
+      owner: cmsConfig.githubUser,
+      repo: cmsConfig.githubRepo,
+      path: "content.json",
+      message: `Content update ${new Date().toISOString()}`,
+      content: b64EncodeUnicode(JSON.stringify(contentToSync, null, 2)),
+      sha: currentFile.sha
+    });
+
+    // Update local state with merged content
+    await set("content-json", contentToSync);
+
+  } catch (error) {
+    console.error('Sync failed:', error);
+    // ... your existing error handling ...
+  }
+}
