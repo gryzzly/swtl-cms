@@ -55,8 +55,8 @@ export function Html({ children, title, basePath = '', styles = [] }) {
           }
         </style>
         <!-- here is a comment -->
-        <script type="module" src="${basePath}/prose-mirror-editor.js"></script>
-        <script type="module" src="${basePath}/cloudinary-upload.js"></script>
+        <script type="module" src="${basePath}/vendor/prose-mirror-editor.js"></script>
+        <script type="module" src="${basePath}/vendor/cloudinary-upload.js"></script>
 
         <title>${title ?? ""}</title>
         <style>

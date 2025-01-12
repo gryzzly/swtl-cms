@@ -5,7 +5,8 @@
     "main": "index.js",
     "scripts": {
       "start": "cp src/index.html . && cp src/vendor/*.js . || true  && esbuild src/sw.js --bundle --outfile=sw.js --watch --format=iife",
-      "build": "rm -rf index.html *.js && esbuild src/sw.js --bundle --outfile=sw.js --minify --sourcemap --format=iife && cp src/index.html . && cp src/vendor/*.js ."
+      "build": "node build.js",
+      "dev": "node build.js --watch"
     },
     "keywords": [],
     "author": "",
@@ -20,4 +21,3 @@
       "esbuild": "^0.19.9"
     }
   }
-  
