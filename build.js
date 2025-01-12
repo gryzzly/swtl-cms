@@ -1,0 +1,66 @@
+const esbuild = require('esbuild');
+const fs = require('fs/promises');
+const path = require('path');
+
+async function copyDir(src, dest) {
+  // Create destination directory
+  await fs.mkdir(dest, { recursive: true });
+
+  // Read source directory
+  const entries = await fs.readdir(src, { withFileTypes: true });
+
+  // Copy each entry
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyDir(srcPath, destPath);
+    } else {
+      await fs.copyFile(srcPath, destPath);
+    }
+  }
+}
+
+async function build({ watch = false } = {}) {
+  // Create dist directory
+  const distDir = path.join(__dirname, './dist/admin');
+  await fs.mkdir(distDir, { recursive: true });
+
+  const buildOptions = {
+    entryPoints: ['src/sw.js'],
+    bundle: true,
+    outfile: path.join(distDir, 'sw.js'),
+    format: 'esm',
+    minify: !watch, // Only minify in production
+  };
+
+  if (watch) {
+    // Watch mode
+    const context = await esbuild.context(buildOptions);
+    await context.watch();
+    console.log('Watching for changes...');
+  } else {
+    // Single build
+    await esbuild.build(buildOptions);
+  }
+
+  // Copy static files
+  await fs.copyFile(
+    path.join(__dirname, 'src/index.html'),
+    path.join(distDir, 'index.html')
+  );
+
+  // Copy entire vendor directory
+  const srcVendorDir = path.join(__dirname, 'src/vendor');
+  const destVendorDir = path.join(distDir, 'vendor');
+  await copyDir(srcVendorDir, destVendorDir);
+
+  if (!watch) {
+    console.log('Build complete! Your admin panel is ready in dist/admin/');
+  }
+}
+
+// Check if --watch flag is passed
+const watch = process.argv.includes('--watch');
+build({ watch }).catch(console.error);
