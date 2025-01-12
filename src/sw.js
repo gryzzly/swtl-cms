@@ -23,6 +23,13 @@ import { b64EncodeUnicode, b64DecodeUnicode } from "./utils.js";
 
 let config = {};
 
+const GITHUB_CONFIG = {
+  paths: {
+    config: 'config.json',
+    content: 'content.json'
+  }
+}
+
 // self.location.pathname is /admin/sw.js, so we remove the filename
 // to get the containing directory
 const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, '');
