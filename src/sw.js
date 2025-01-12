@@ -103,7 +103,7 @@ function mergeContents(localContent, remoteContent) {
 //   : `<input id="${fieldKey}" name="${field.name}">`
 //
 function selectWidget(field, fieldKey, currentItem) {
-  const value = currentItem ? currentItem[field.name] : ``;
+  const value = currentItem ? currentItem[field.name] : '';
 
   if (field.widget === "text-editor") {
     return `<prosemirror-editor id="${fieldKey}" name="${field.name}" html="${value ? escapeHTML(value) : ''}"></prosemirror-editor>`;
@@ -115,6 +115,23 @@ function selectWidget(field, fieldKey, currentItem) {
       value="${value}"
       url="https://api.cloudinary.com/v1_1/dcvrycv7k/image/upload"
     ></cloudinary-upload>`;
+  }
+  if (field.widget === "date") {
+    // Convert timestamp to YYYY-MM-DD format for the date input
+    const dateValue = value ? new Date(parseInt(value)).toISOString().split('T')[0] : '';
+    return `
+      <input
+        type="date"
+        id="${fieldKey}"
+        name="${field.name}"
+        value="${dateValue}"
+      />
+      <input
+        type="hidden"
+        name="${field.name}-type"
+        value="date"
+      />
+    `;
   }
   return `<input id="${fieldKey}" name="${field.name}" value="${value}"/>`;
 }
@@ -483,16 +500,22 @@ self.addEventListener("fetch", async (event) => {
 
           if (isDeleteAction && itemId) {
             items.splice(currentItemIndex, 1);
-            // Track the deletion
             content.deletedIds = content.deletedIds || {};
             content.deletedIds[itemId] = Date.now();
           } else {
+            const now = Date.now();
             const item = {
               id: itemId || `${Math.random().toString(36).slice(2, 9)}`,
+              createdAt: currentItemIndex > -1 ? items[currentItemIndex].createdAt : now,
+              modifiedAt: now
             };
 
             for (const [key, value] of formData.entries()) {
-              item[key] = value;
+              if (value && formData.get(`${key}-type`) === 'date') {
+                item[key] = new Date(value).getTime();
+              } else {
+                item[key] = value;
+              }
             }
 
             if (currentItemIndex > -1) {
@@ -504,7 +527,6 @@ self.addEventListener("fetch", async (event) => {
 
           content.collections[collectionName] = items;
           content.lastModified = Date.now();
-
           await set("content-json", content);
 
           return Response.redirect(
@@ -588,3 +610,4 @@ async function syncToGithub() {
     // ... your existing error handling ...
   }
 }
+
