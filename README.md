@@ -7,7 +7,7 @@ A lightweight CMS that works entirely in the browser using Service Workers and G
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/swtl-cms.git
+git clone https://github.com/gryzzly/swtl-cms.git
 cd swtl-cms
 ```
 
