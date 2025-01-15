@@ -1,6 +1,6 @@
 import { html } from "swtl";
 
-export function Html({ children, title, basePath = '', styles = [] }) {
+export function Html({ children, title, basePath = '', styles = [], scripts = [] }) {
   return html`
     <html lang="en">
       <head>
@@ -54,9 +54,10 @@ export function Html({ children, title, basePath = '', styles = [] }) {
             padding: 5px;
           }
         </style>
-        <!-- here is a comment -->
-        <script type="module" src="${basePath}/vendor/prose-mirror-editor.js"></script>
-        <script type="module" src="${basePath}/vendor/cloudinary-upload.js"></script>
+
+        ${scripts.map(script => `
+          <script type="module" src="${basePath}/remote/${script}.js"></script>
+        `).join('')}
 
         <title>${title ?? ""}</title>
         <style>

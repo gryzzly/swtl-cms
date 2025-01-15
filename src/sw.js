@@ -102,40 +102,45 @@ function mergeContents(localContent, remoteContent) {
 //   ?
 //   : `<input id="${fieldKey}" name="${field.name}">`
 //
+// Updated selectWidget function to handle custom widgets
 function selectWidget(field, fieldKey, currentItem) {
-  const value = currentItem ? currentItem[field.name] : '';
+  const value = currentItem && currentItem[field.name]
+    ? typeof currentItem[field.name] === "string"
+      ? escapeHTML(currentItem[field.name])
+      : currentItem[field.name]
+    : '';
 
-  if (field.widget === "text-editor") {
-    return `<prosemirror-editor id="${fieldKey}" name="${field.name}" html="${value ? escapeHTML(value) : ''}"></prosemirror-editor>`;
+  // Handle built-in widgets first
+  switch (field.widget) {
+    case "date":
+      const dateValue = value ? new Date(parseInt(value)).toISOString().split('T')[0] : '';
+      return `
+        <input
+          type="date"
+          id="${fieldKey}"
+          name="${field.name}"
+          value="${dateValue}"
+        />
+        <input
+          type="hidden"
+          name="${field.name}-type"
+          value="date"
+        />`;
   }
-  if (field.widget === "cloudinary-upload") {
-    return `<cloudinary-upload
-      id=${fieldKey}
+
+  // If it's a custom widget, ensure it's loaded and return the element
+  if (field.widgetUrl) {
+    return `<${field.widget}
+      id="${fieldKey}"
       name="${field.name}"
       value="${value}"
-      url="https://api.cloudinary.com/v1_1/dcvrycv7k/image/upload"
-    ></cloudinary-upload>`;
+      ${field.widgetConfig ? `config='${JSON.stringify(field.widgetConfig)}'` : ''}
+    ></${field.widget}>`;
   }
-  if (field.widget === "date") {
-    // Convert timestamp to YYYY-MM-DD format for the date input
-    const dateValue = value ? new Date(parseInt(value)).toISOString().split('T')[0] : '';
-    return `
-      <input
-        type="date"
-        id="${fieldKey}"
-        name="${field.name}"
-        value="${dateValue}"
-      />
-      <input
-        type="hidden"
-        name="${field.name}-type"
-        value="date"
-      />
-    `;
-  }
+
+  // Default to basic text input
   return `<input id="${fieldKey}" name="${field.name}" value="${value}"/>`;
 }
-
 let octokit;
 
 async function SyncStatus({ children, title, styles = [] }) {
@@ -248,10 +253,13 @@ const router = new Router({
                 repo: cmsConfig.githubRepo,
                 path: GITHUB_CONFIG.paths.config,
               });
+              const config = JSON.parse(b64DecodeUnicode(configFile.data.content));
               await set(
                 "config-json",
-                JSON.parse(b64DecodeUnicode(configFile.data.content)),
+                config
               );
+              // Prefetch widget scripts after config is loaded
+              await prefetchWidgetScripts(config);
             } catch (e) {
               console.error(e);
               console.error("Create a config file!");
@@ -338,7 +346,9 @@ const router = new Router({
         const collectionConfig = config.collections.find(
           ({ name }) => collectionName === name,
         );
-        return html`<${Html} title="editing" basePath=${BASEPATH}>
+        const scripts = collectionConfig.fields.map(({widgetUrl, widget}) => widgetUrl ? widget : null).filter(w => w);
+
+        return html`<${Html} title="editing" basePath="${BASEPATH}" scripts="${scripts}">
           <a href="${BASEPATH}"><button>Back</button></a>
           <${SyncStatus} />
           <form action="${BASEPATH}/collections/${collectionName}/" method="POST">
@@ -350,7 +360,6 @@ const router = new Router({
                 return `<fieldset>
                 <label for="${fieldKey}">${field.label}</label>
 
-                <!-- input type="hidden" name="collectionName" value=${collectionName} -->
                 ${selectWidget(field, fieldKey)}
               </fieldset>`;
               })
@@ -377,8 +386,9 @@ const router = new Router({
         );
         const items = content.collections[collectionName] || [];
         const currentItem = items.find(({ id }) => id === params.itemId);
+        const scripts = collectionConfig.fields.map(({widgetUrl, widget}) => widgetUrl ? widget : null).filter(w => w);
 
-        return html`<${Html} title="editing" basePath="${BASEPATH}>
+        return html`<${Html} title="editing" basePath="${BASEPATH} scripts="${scripts}">
           <a href="${BASEPATH}/collections/${collectionName}/"><button>Back</button></a>
           <form
             action="${BASEPATH}/collections/${collectionName}${"/"}${params.itemId}"
@@ -447,6 +457,13 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+async function fetchAndCacheScript(url, scriptId) {
+  const response = await fetch(url);
+  const content = await response.text();
+  await set(`script-${scriptId}`, content);
+  return content;
+}
+
 // How to match a trailing slash but also an optional param
 // https://github.com/whatwg/urlpattern/issues/14
 // Use {} notation to not "consume" the slash by the param notation
@@ -455,11 +472,52 @@ const collectionsPathPattern = new URLPattern(
   self.location.origin,
 );
 
-// Add a new pattern for sync endpoint
 const syncPathPattern = new URLPattern(
   `${BASEPATH}/sync`,
   self.location.origin,
 );
+
+const remoteScriptPattern = new URLPattern(
+  `${BASEPATH}/remote/{:scriptId}.js`,
+  self.location.origin
+);
+
+
+self.addEventListener("fetch", async (event) => {
+  let scriptMatch = remoteScriptPattern.exec(event.request.url);
+
+  if (scriptMatch) {
+    event.respondWith((async () => {
+      const scriptId = scriptMatch.pathname.groups.scriptId;
+      const config = await get("config-json");
+
+      // Find script URL from config
+      const scriptUrl = config.collections
+        .flatMap(c => c.fields)
+        .find(f => f.widget === scriptId)
+        ?.widgetUrl;
+
+      if (!scriptUrl) {
+        return new Response('Script not found', { status: 404 });
+      }
+
+      // Try to get cached script
+      const cachedScript = await get(`script-${scriptId}`);
+      if (cachedScript) {
+        return new Response(cachedScript, {
+          headers: { 'Content-Type': 'application/javascript' }
+        });
+      }
+
+        // Fetch and cache if not found
+      const script = await fetchAndCacheScript(scriptUrl, scriptId);
+      return new Response(script, {
+        headers: { 'Content-Type': 'application/javascript' }
+      });
+    })());
+    return;
+  }
+});
 
 self.addEventListener("fetch", async (event) => {
   let collectionsPathMatch = null;
@@ -607,7 +665,31 @@ async function syncToGithub() {
 
   } catch (error) {
     console.error('Sync failed:', error);
-    // ... your existing error handling ...
   }
 }
 
+// Add this function to handle initial script fetching
+async function prefetchWidgetScripts(config) {
+  const scripts = config.collections
+    .flatMap(c => c.fields)
+    .filter(f => f.widget && f.widgetUrl)
+    .map(f => ({
+      id: f.widget,
+      url: f.widgetUrl
+    }));
+
+  console.log('Prefetching widget scripts:', scripts);
+
+  for (const script of scripts) {
+    try {
+      // Check if already cached
+      const cached = await get(`script-${script.id}`);
+      if (!cached) {
+        console.log(`Fetching script: ${script.id}`);
+        await fetchAndCacheScript(script.url, script.id);
+      }
+    } catch (error) {
+      console.error(`Failed to prefetch script ${script.id}:`, error);
+    }
+  }
+}

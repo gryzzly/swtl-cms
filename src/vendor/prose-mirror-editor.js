@@ -72,7 +72,7 @@ class ProseMirrorEditor extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `<div id="editor"></div>`;
     const editorElement = this.querySelector("#editor");
-    const initialContent = this.getAttribute("html");
+    const initialContent = this.getAttribute("value");
     const customChangeEventName = this.getAttribute("change-event");
 
     // default empty paragraph
@@ -85,7 +85,7 @@ class ProseMirrorEditor extends HTMLElement {
     if (initialContent) {
       // html -> DOM
       const contentElement = new DOMParser().parseFromString(
-        initialContent,
+        decodeHTMLEntities(initialContent),
         "text/html",
       ).body;
       // DOM -> Prosemirror doc
@@ -167,6 +167,12 @@ function markActive(state, type) {
   let { from, $from, to, empty } = state.selection;
   if (empty) return !!type.isInSet(state.storedMarks || $from.marks());
   else return state.doc.rangeHasMark(from, to, type);
+}
+
+function decodeHTMLEntities(html) {
+  const txt = document.createElement("textarea");
+  txt.innerHTML = html;
+  return txt.value;
 }
 
 customElements.define("prosemirror-editor", ProseMirrorEditor);
