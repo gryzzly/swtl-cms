@@ -43,16 +43,23 @@ function escapeHTML(html) {
 }
 
 function mergeContents(localContent, remoteContent) {
-  // Create new content object
+  // Initialize merged content structure
   const mergedContent = {
-    lastModified: Math.max(localContent.lastModified, remoteContent.lastModified),
     collections: {},
-    // Track deletions with timestamps { id: timestamp }
-    deletedIds: {
-      ...(localContent.deletedIds || {}),
-      ...(remoteContent.deletedIds || {})
-    }
+    deletedIds: {} // Ensure deletedIds exists
   };
+
+  // Merge deletedIds from both sources
+  const allDeletedIds = new Set([
+    ...Object.keys(localContent.deletedIds || {}),
+    ...Object.keys(remoteContent.deletedIds || {})
+  ]);
+
+  for (const id of allDeletedIds) {
+    const localTimestamp = (localContent.deletedIds || {})[id] || 0;
+    const remoteTimestamp = (remoteContent.deletedIds || {})[id] || 0;
+    mergedContent.deletedIds[id] = Math.max(localTimestamp, remoteTimestamp);
+  }
 
   // Clean up old deletions (older than 30 days)
   const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
@@ -74,17 +81,16 @@ function mergeContents(localContent, remoteContent) {
 
     const itemsMap = new Map();
 
-    // Add all remote items first (if not deleted)
-    remoteItems.forEach(item => {
-      if (!Object.keys(mergedContent.deletedIds).includes(item.id)) {
-        itemsMap.set(item.id, item);
-      }
-    });
-
-    // Add/override with local items (if not deleted)
-    localItems.forEach(item => {
-      if (!Object.keys(mergedContent.deletedIds).includes(item.id)) {
-        itemsMap.set(item.id, item);
+    // Process all items, but exclude deleted ones
+    [...remoteItems, ...localItems].forEach(item => {
+      if (!mergedContent.deletedIds[item.id]) {
+        const existingItem = itemsMap.get(item.id);
+        if (!existingItem || item.modifiedAt > existingItem.modifiedAt) {
+          itemsMap.set(item.id, {
+            ...item,
+            modifiedAt: item.modifiedAt || Date.now()
+          });
+        }
       }
     });
 
@@ -94,6 +100,7 @@ function mergeContents(localContent, remoteContent) {
 
   return mergedContent;
 }
+
 
 
 // FIXME: this selection of the component to render (and its attributes?) needs
@@ -120,15 +127,10 @@ function selectWidget(field, fieldKey, currentItem) {
           id="${fieldKey}"
           name="${field.name}"
           value="${dateValue}"
-        />
-        <input
-          type="hidden"
-          name="${field.name}-type"
-          value="date"
         />`;
   }
 
-  // If it's a custom widget, ensure it's loaded and return the element
+  // If it's a custom widget return the element
   if (field.widgetUrl) {
     return `<${field.widget}
       id="${fieldKey}"
@@ -143,31 +145,30 @@ function selectWidget(field, fieldKey, currentItem) {
 }
 let octokit;
 
-async function SyncStatus({ children, title, styles = [] }) {
-  const octokit = await getOctokit();
-  const cmsConfig = await get('config');
-  const configFile = await octokit.repos.getContent({
-    owner: cmsConfig.githubUser,
-    repo: cmsConfig.githubRepo,
-    path: GITHUB_CONFIG.paths.config,
-  });
-  const contentFile = await octokit.repos.getContent({
-    owner: cmsConfig.githubUser,
-    repo: cmsConfig.githubRepo,
-    path: GITHUB_CONFIG.paths.content,
-  });
-
-  const remoteContent = JSON.parse(b64DecodeUnicode(contentFile.data.content));
+async function SyncStatus() {
+  const lastSyncTime = await get("last-sync-time") || 0;
   const localContent = await get("content-json");
 
-  if (localContent.lastModified > remoteContent.lastModified) {
-    return html`<div>
-      <p style="border: 1px solid; padding: 10px; background: white;">Local content has updates</p>
-      <form action="${BASEPATH}/sync" method="POST">
-        <button type="submit">Sync</button>
-      </form>
-    </div>`;
-  }
+  // Check if any content was modified or deleted after the last sync
+  const hasLocalChanges = Object.values(localContent.collections || {})
+    .flat()
+    .some(item => (item.modifiedAt || 0) > lastSyncTime)
+    ||
+    Object.values(localContent.deletedIds || {})
+      .some(deletedAt => deletedAt > lastSyncTime);
+
+  return html`<style>.sync-status {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+  }</style>
+    <div class="sync-status">
+    ${hasLocalChanges ? `<p style="border: 1px solid; padding: 10px; background: white;">Local content has updates</p>` : ""}
+    <form action="${BASEPATH}/sync" method="POST">
+      <button type="submit">Sync</button>
+    </form>
+  </div>`;
 
   return html`<div>
     <p style="border: 1px solid; padding: 10px; background: lightgrey;">Local content is synced</p>
@@ -272,15 +273,9 @@ const router = new Router({
               });
               const remoteContent = JSON.parse(b64DecodeUnicode(contentFile.data.content));
               const localContent = await get("content-json");
-              // merge from server if lastModified on the server is newer
-              if (
-                !localContent ||
-                localContent.lastModified < remoteContent.lastModified ||
-                !localContent.lastModified
-              ) {
-                const mergedContent = mergeContents(localContent || { collections: {} }, remoteContent);
-                await set("content-json", mergedContent);
-              }
+              const mergedContent = mergeContents(localContent || { collections: {} }, remoteContent);
+              await set("last-sync-time", Date.now());
+              await set("content-json", mergedContent);
             } catch (e) {
               console.error(e);
             }
@@ -317,8 +312,8 @@ const router = new Router({
               list-style: none;
             }
           </style>
-          <a href="${BASEPATH}"><button>Back</button></a>
           <${SyncStatus} />
+          <a href="${BASEPATH}"><button>Back</button></a>
           <div>
             <h2>✎ ${collectionName}</h2>
             <a href="${BASEPATH}/collections/${collectionName}/new"
@@ -349,8 +344,8 @@ const router = new Router({
         const scripts = collectionConfig.fields.map(({widgetUrl, widget}) => widgetUrl ? widget : null).filter(w => w);
 
         return html`<${Html} title="editing" basePath="${BASEPATH}" scripts="${scripts}">
-          <a href="${BASEPATH}"><button>Back</button></a>
           <${SyncStatus} />
+          <a href="${BASEPATH}"><button>Back</button></a>
           <form action="${BASEPATH}/collections/${collectionName}/" method="POST">
             <h2>New item for ${collectionName}</h2>
             ${collectionConfig.fields
@@ -587,6 +582,16 @@ self.addEventListener("fetch", async (event) => {
           content.lastModified = Date.now();
           await set("content-json", content);
 
+          // If we're online, sync before redirecting
+          try {
+            await syncToGithub();
+            // Update last-sync-time after successful sync
+            await set("last-sync-time", Date.now());
+          } catch (error) {
+            console.error('Auto-sync failed:', error);
+            // Continue with redirect even if sync fails
+          }
+
           return Response.redirect(
             `${BASEPATH}/collections/${collectionName}/`,
           );
@@ -645,10 +650,38 @@ async function syncToGithub() {
 
     const remoteContent = JSON.parse(b64DecodeUnicode(currentFile.content));
 
-    console.log(remoteContent)
+    // Ensure deletedIds exists in both objects
+    localContent.deletedIds = localContent.deletedIds || {};
+    remoteContent.deletedIds = remoteContent.deletedIds || {};
 
-    // Always merge with remote to prevent lost updates
-    const contentToSync = mergeContents(localContent, remoteContent);
+    // Merge deletedIds from local to remote, keeping the newer deletion timestamps
+    const mergedDeletedIds = {};
+    const allDeletedIds = new Set([
+      ...Object.keys(localContent.deletedIds),
+      ...Object.keys(remoteContent.deletedIds)
+    ]);
+
+    for (const id of allDeletedIds) {
+      const localTimestamp = localContent.deletedIds[id] || 0;
+      const remoteTimestamp = remoteContent.deletedIds[id] || 0;
+      mergedDeletedIds[id] = Math.max(localTimestamp, remoteTimestamp);
+    }
+
+    // Create merged content with the combined deletedIds
+    const contentToSync = mergeContents(
+      { ...localContent, deletedIds: mergedDeletedIds },
+      { ...remoteContent, deletedIds: mergedDeletedIds }
+    );
+
+    // Ensure the merged content includes the deletedIds
+    contentToSync.deletedIds = mergedDeletedIds;
+
+    // Clean up items that are in deletedIds
+    for (const collectionName in contentToSync.collections) {
+      contentToSync.collections[collectionName] = contentToSync.collections[collectionName].filter(
+        item => !contentToSync.deletedIds[item.id]
+      );
+    }
 
     // Upload the merged content
     await octokit.repos.createOrUpdateFileContents({
@@ -662,9 +695,11 @@ async function syncToGithub() {
 
     // Update local state with merged content
     await set("content-json", contentToSync);
+    await set("last-sync-time", Date.now());
 
   } catch (error) {
     console.error('Sync failed:', error);
+    throw error; // Re-throw to handle in the calling function
   }
 }
 
