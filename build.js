@@ -32,7 +32,10 @@ async function build({ watch = false } = {}) {
     bundle: true,
     outfile: path.join(distDir, 'sw.js'),
     format: 'esm',
-    minify: !watch, // Only minify in production
+    minify: !watch,
+    sourcemap: true,
+    sourceRoot: '/src',
+    metafile: true,
   };
 
   if (watch) {
@@ -42,7 +45,14 @@ async function build({ watch = false } = {}) {
     console.log('Watching for changes...');
   } else {
     // Single build
-    await esbuild.build(buildOptions);
+    const result = await esbuild.build(buildOptions);
+
+    // Optionally log build metadata
+    if (result.metafile) {
+      console.log('Build complete! Source maps generated.');
+      // Uncomment to see detailed build info:
+      // console.log(await esbuild.analyzeMetafile(result.metafile));
+    }
   }
 
   // Copy static files
