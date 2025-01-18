@@ -169,10 +169,6 @@ async function SyncStatus() {
       <button type="submit">Sync</button>
     </form>
   </div>`;
-
-  return html`<div>
-    <p style="border: 1px solid; padding: 10px; background: lightgrey;">Local content is synced</p>
-  </div>`;
 }
 
 async function getOctokit() {
@@ -564,11 +560,7 @@ self.addEventListener("fetch", async (event) => {
             };
 
             for (const [key, value] of formData.entries()) {
-              if (value && formData.get(`${key}-type`) === 'date') {
-                item[key] = new Date(value).getTime();
-              } else {
-                item[key] = value;
-              }
+              item[key] = value;
             }
 
             if (currentItemIndex > -1) {
