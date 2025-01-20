@@ -3,7 +3,7 @@ import { Html } from "./pages/Html.js";
 import { Octokit } from "@octokit/rest";
 import "urlpattern-polyfill";
 
-import { set, get } from "./vendor/idb-keyval.js";
+import { set, get, clear } from "./vendor/idb-keyval.js";
 
 // TODOS:
 // - [x] Add simple image field
@@ -237,6 +237,10 @@ const router = new Router({
         {
           name: "auth-plugin",
           async beforeResponse({ url, query, params, request }) {
+            // for some bizarre reason, sometimes chrome returns a token
+            // when the db is supposedly deleted or empty.
+            // so we should recover from this situation –
+            // if there is an error getting the content, we should clear the DB
             const token = await get("token");
             if (!token) {
               return Response.redirect(`${BASEPATH}/login`);
@@ -258,6 +262,10 @@ const router = new Router({
               // Prefetch widget scripts after config is loaded
               await prefetchWidgetScripts(config);
             } catch (e) {
+              if (e.message.includes("Bad credentials")) {
+                clear();
+                return Response.redirect(BASEPATH);
+              }
               console.error(e);
               console.error("Create a config file!");
             }
