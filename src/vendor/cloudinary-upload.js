@@ -1,4 +1,27 @@
-import "https://unpkg.com/element-internals-polyfill";
+// Helper function to decode HTML entities
+function decodeHtmlEntities(encodedString) {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = encodedString;
+  return textarea.value;
+}
+
+// Check if ElementInternals is supported
+function isElementInternalsSupported() {
+  return 'ElementInternals' in window;
+}
+
+async function loadElementInternalsPolyfill() {
+  if (!isElementInternalsSupported()) {
+    try {
+      await import('https://unpkg.com/element-internals-polyfill');
+      console.log('ElementInternals polyfill loaded successfully');
+    } catch (error) {
+      console.error('Failed to load ElementInternals polyfill:', error);
+    }
+  } else {
+    console.log('ElementInternals is natively supported');
+  }
+}
 
 class ImageUpload extends HTMLElement {
   static formAssociated = true;
@@ -6,17 +29,25 @@ class ImageUpload extends HTMLElement {
   constructor() {
     super();
     this.internals = this.attachInternals();
-    this.url = this.getAttribute("url");
-
-    // Bind methods to maintain correct 'this' context
-    this.handleDrop = this.handleDrop.bind(this);
-    this.handleDragOver = this.handleDragOver.bind(this);
-    this.handleDragEnter = this.handleDragEnter.bind(this);
-    this.handleDragLeave = this.handleDragLeave.bind(this);
+    this.url = ''; // Default URL, may be overridden by config attribute
   }
 
   connectedCallback() {
-    const value = this.getAttribute("value");
+    const value = this.getAttribute('value');
+    const config = this.getAttribute('config');
+
+    // Parse and decode config JSON if provided
+    if (config) {
+      try {
+        const decodedConfig = decodeHtmlEntities(config);
+        const parsedConfig = JSON.parse(decodedConfig);
+        if (parsedConfig.url) {
+          this.url = parsedConfig.url;
+        }
+      } catch (error) {
+        console.error('Invalid JSON in config attribute:', error);
+      }
+    }
 
     // Create drop zone with file input
     this.innerHTML = `
@@ -29,7 +60,7 @@ class ImageUpload extends HTMLElement {
         cursor: pointer;
         transition: all 0.3s ease;
       ">
-        ${value !== "null" && value ? `<img src="${value}" style="max-width: 100%; margin-bottom: 10px;">` : ''}
+        ${value !== 'null' && value ? `<img src="${value}" style="max-width: 100%; margin-bottom: 10px;">` : ''}
         <input type="file" accept="image/*" style="display: none;">
         <div class="upload-text">
           Drop image here or click to upload
@@ -39,6 +70,12 @@ class ImageUpload extends HTMLElement {
 
     const dropZone = this.querySelector('.upload-zone');
     const fileInput = this.querySelector('input');
+
+    // Bind event handlers
+    this.handleDrop = this.handleDrop.bind(this);
+    this.handleDragOver = this.handleDragOver.bind(this);
+    this.handleDragEnter = this.handleDragEnter.bind(this);
+    this.handleDragLeave = this.handleDragLeave.bind(this);
 
     // Add drag and drop event listeners
     dropZone.addEventListener('dragover', this.handleDragOver);
@@ -90,8 +127,8 @@ class ImageUpload extends HTMLElement {
     }
 
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", "default-swtl");
+    formData.append('file', file);
+    formData.append('upload_preset', 'default-swtl');
 
     try {
       const uploadZone = this.querySelector('.upload-zone');
@@ -99,7 +136,7 @@ class ImageUpload extends HTMLElement {
       uploadZone.querySelector('.upload-text').textContent = 'Uploading...';
 
       const response = await fetch(this.url, {
-        method: "POST",
+        method: 'POST',
         body: formData,
       });
 
@@ -117,11 +154,16 @@ class ImageUpload extends HTMLElement {
         </div>
       `;
     } catch (error) {
-      console.error("Upload failed:", error);
+      console.error('Upload failed:', error);
       this.querySelector('.upload-text').textContent = 'Upload failed. Try again.';
       this.querySelector('.upload-zone').style.opacity = '1';
     }
   }
 }
 
-customElements.define("cloudinary-upload", ImageUpload);
+async function initializeCustomElement() {
+  await loadElementInternalsPolyfill();
+  customElements.define('cloudinary-upload', ImageUpload);
+}
+
+initializeCustomElement();
