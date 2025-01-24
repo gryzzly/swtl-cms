@@ -39,7 +39,6 @@ async function build({ watch = false } = {}) {
   };
 
   if (watch) {
-    // Watch mode
     const context = await esbuild.context(buildOptions);
     await context.watch();
     console.log('Watching for changes...');
@@ -47,7 +46,6 @@ async function build({ watch = false } = {}) {
     // Single build
     const result = await esbuild.build(buildOptions);
 
-    // Optionally log build metadata
     if (result.metafile) {
       console.log('Build complete! Source maps generated.');
       // Uncomment to see detailed build info:
@@ -57,8 +55,8 @@ async function build({ watch = false } = {}) {
 
   // Copy static files
   await fs.copyFile(
-    path.join(__dirname, 'src/index.html'),
-    path.join(distDir, 'index.html')
+    path.join(__dirname, 'src/index.html.tmpl'),
+    path.join(distDir, 'index.html.tmpl')
   );
 
   // Copy entire vendor directory
