@@ -20,39 +20,38 @@ import { set, get, del } from "./vendor/idb-keyval.js";
 
 import { b64EncodeUnicode, b64DecodeUnicode } from "./utils.js";
 
-
 let config = {};
 
 const GITHUB_CONFIG = {
   paths: {
-    config: 'config.json',
-    content: 'content.json'
-  }
-}
+    config: "config.json",
+    content: "content.json",
+  },
+};
 
 // self.location.pathname is /admin/sw.js, so we remove the filename
 // to get the containing directory
-const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, '');
+const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, "");
 
 function escapeHTML(html) {
-  return html.replace(/&/g, '&amp;')
-             .replace(/</g, '&lt;')
-             .replace(/>/g, '&gt;')
-             .replace(/"/g, '&quot;')
-             .replace(/'/g, '&#039;');
+  return html
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function mergeContents(localContent = {}, remoteContent = {}) {
   // Initialize merged content structure
   const mergedContent = {
     collections: {},
-    deletedIds: {} // Ensure deletedIds exists
+    deletedIds: {}, // Ensure deletedIds exists
   };
-
   // Merge deletedIds from both sources
   const allDeletedIds = new Set([
     ...Object.keys(localContent.deletedIds || {}),
-    ...Object.keys(remoteContent.deletedIds || {})
+    ...Object.keys(remoteContent.deletedIds || {}),
   ]);
 
   for (const id of allDeletedIds) {
@@ -62,16 +61,17 @@ function mergeContents(localContent = {}, remoteContent = {}) {
   }
 
   // Clean up old deletions (older than 30 days)
-  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
   mergedContent.deletedIds = Object.fromEntries(
-    Object.entries(mergedContent.deletedIds)
-      .filter(([_, timestamp]) => timestamp > thirtyDaysAgo)
+    Object.entries(mergedContent.deletedIds).filter(
+      ([_, timestamp]) => timestamp > thirtyDaysAgo,
+    ),
   );
 
   // Get all collection names from both local and remote
   const allCollectionNames = new Set([
     ...Object.keys(localContent.collections || {}),
-    ...Object.keys(remoteContent.collections || {})
+    ...Object.keys(remoteContent.collections || {}),
   ]);
 
   // Merge each collection
@@ -82,13 +82,13 @@ function mergeContents(localContent = {}, remoteContent = {}) {
     const itemsMap = new Map();
 
     // Process all items, but exclude deleted ones
-    [...remoteItems, ...localItems].forEach(item => {
+    [...remoteItems, ...localItems].forEach((item) => {
       if (!mergedContent.deletedIds[item.id]) {
         const existingItem = itemsMap.get(item.id);
         if (!existingItem || item.modifiedAt > existingItem.modifiedAt) {
           itemsMap.set(item.id, {
             ...item,
-            modifiedAt: item.modifiedAt || Date.now()
+            modifiedAt: item.modifiedAt || Date.now(),
           });
         }
       }
@@ -101,8 +101,6 @@ function mergeContents(localContent = {}, remoteContent = {}) {
   return mergedContent;
 }
 
-
-
 // FIXME: this selection of the component to render (and its attributes?) needs
 // to happen based on the config
 // field.widget === "text-editor"
@@ -111,16 +109,19 @@ function mergeContents(localContent = {}, remoteContent = {}) {
 //
 // Updated selectWidget function to handle custom widgets
 function selectWidget(field, fieldKey, currentItem) {
-  const value = currentItem && currentItem[field.name]
-    ? typeof currentItem[field.name] === "string"
-      ? escapeHTML(currentItem[field.name])
-      : currentItem[field.name]
-    : '';
+  const value =
+    currentItem && currentItem[field.name]
+      ? typeof currentItem[field.name] === "string"
+        ? escapeHTML(currentItem[field.name])
+        : currentItem[field.name]
+      : "";
 
   // Handle built-in widgets first
   switch (field.widget) {
     case "date":
-      const dateValue = value ? new Date(parseInt(value)).toISOString().split('T')[0] : '';
+      const dateValue = value
+        ? new Date(parseInt(value)).toISOString().split("T")[0]
+        : "";
       return `
         <input
           type="date"
@@ -136,7 +137,7 @@ function selectWidget(field, fieldKey, currentItem) {
       id="${fieldKey}"
       name="${field.name}"
       value="${value}"
-      ${field.widgetConfig ? `config='${JSON.stringify(field.widgetConfig)}'` : ''}
+      ${field.widgetConfig ? `config='${JSON.stringify(field.widgetConfig)}'` : ""}
     ></${field.widget}>`;
   }
 
@@ -146,29 +147,34 @@ function selectWidget(field, fieldKey, currentItem) {
 let octokit;
 
 async function SyncStatus() {
-  const lastSyncTime = await get("last-sync-time") || 0;
+  const lastSyncTime = (await get("last-sync-time")) || 0;
   const localContent = await get("content-json");
 
   // Check if any content was modified or deleted after the last sync
-  const hasLocalChanges = Object.values(localContent.collections || {})
-    .flat()
-    .some(item => (item.modifiedAt || 0) > lastSyncTime)
-    ||
-    Object.values(localContent.deletedIds || {})
-      .some(deletedAt => deletedAt > lastSyncTime);
+  const hasLocalChanges =
+    Object.values(localContent.collections || {})
+      .flat()
+      .some((item) => (item.modifiedAt || 0) > lastSyncTime) ||
+    Object.values(localContent.deletedIds || {}).some(
+      (deletedAt) => deletedAt > lastSyncTime,
+    );
 
-  return html`<style>.sync-status {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    right: 20px;
-  }</style>
+  return html`<style>
+      .sync-status {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+      }
+    </style>
     <div class="sync-status">
-    ${hasLocalChanges ? `<p style="border: 1px solid; padding: 10px; background: white;">Local content has updates</p>` : ""}
-    <form action="${BASEPATH}/sync" method="POST">
-      <button type="submit">Sync</button>
-    </form>
-  </div>`;
+      ${hasLocalChanges
+        ? `<p style="border: 1px solid; padding: 10px; background: white;">Local content has updates</p>`
+        : ""}
+      <form action="${BASEPATH}/sync" method="POST">
+        <button type="submit">Sync</button>
+      </form>
+    </div>`;
 }
 
 async function getOctokit() {
@@ -232,7 +238,7 @@ const router = new Router({
       },
     },
     {
-      path: '/',
+      path: "/",
       plugins: [
         {
           name: "auth-plugin",
@@ -246,7 +252,7 @@ const router = new Router({
               return Response.redirect(`${BASEPATH}/login`);
             }
             const octokit = await getOctokit();
-            const cmsConfig = await get('config');
+            const cmsConfig = await get("config");
 
             try {
               const configFile = await octokit.repos.getContent({
@@ -274,9 +280,14 @@ const router = new Router({
                 repo: cmsConfig.githubRepo,
                 path: GITHUB_CONFIG.paths.content,
               });
-              const remoteContent = JSON.parse(b64DecodeUnicode(contentFile.data.content));
+              const remoteContent = JSON.parse(
+                b64DecodeUnicode(contentFile.data.content),
+              );
               const localContent = await get("content-json");
-              const mergedContent = mergeContents(localContent || { collections: {} }, remoteContent);
+              const mergedContent = mergeContents(
+                localContent || { collections: {} },
+                remoteContent,
+              );
               await set("last-sync-time", Date.now());
               await set("content-json", mergedContent);
             } catch (e) {
@@ -344,12 +355,21 @@ const router = new Router({
         const collectionConfig = config.collections.find(
           ({ name }) => collectionName === name,
         );
-        const scripts = collectionConfig.fields.map(({widgetUrl, widget}) => widgetUrl ? widget : null).filter(w => w);
+        const scripts = collectionConfig.fields
+          .map(({ widgetUrl, widget }) => (widgetUrl ? widget : null))
+          .filter((w) => w);
 
-        return html`<${Html} title="editing" basePath="${BASEPATH}" scripts="${scripts}">
+        return html`<${Html}
+          title="editing"
+          basePath="${BASEPATH}"
+          scripts="${scripts}"
+        >
           <${SyncStatus} />
           <a href="${BASEPATH}"><button>Back</button></a>
-          <form action="${BASEPATH}/collections/${collectionName}/" method="POST">
+          <form
+            action="${BASEPATH}/collections/${collectionName}/"
+            method="POST"
+          >
             <h2>New item for ${collectionName}</h2>
             ${collectionConfig.fields
               .map((field) => {
@@ -384,7 +404,9 @@ const router = new Router({
         );
         const items = content.collections[collectionName] || [];
         const currentItem = items.find(({ id }) => id === params.itemId);
-        const scripts = collectionConfig.fields.map(({widgetUrl, widget}) => widgetUrl ? widget : null).filter(w => w);
+        const scripts = collectionConfig.fields
+          .map(({ widgetUrl, widget }) => (widgetUrl ? widget : null))
+          .filter((w) => w);
 
         return html`<${Html} title="editing" basePath="${BASEPATH} scripts="${scripts}">
           <a href="${BASEPATH}/collections/${collectionName}/"><button>Back</button></a>
@@ -416,22 +438,22 @@ const router = new Router({
         <//>`;
       },
     },
-  ]
+  ],
 });
 
-  // ],
-  // TODO:
-  // - on content create / save generate id (Date.now()), set created_at and
-  // modified_at, generate title from textual field or alt of an image, and use
-  // id if none, but regenerate later. alternatively define "display" field in
-  // config
-  //
-  // Ideas:
-  //
-  // Make a post handler that uploads the image and returns its saved path or URL
-  // in case a CDN is used.
-  // [x] Test adding web components that add to formData
-  //
+// ],
+// TODO:
+// - on content create / save generate id (Date.now()), set created_at and
+// modified_at, generate title from textual field or alt of an image, and use
+// id if none, but regenerate later. alternatively define "display" field in
+// config
+//
+// Ideas:
+//
+// Make a post handler that uploads the image and returns its saved path or URL
+// in case a CDN is used.
+// [x] Test adding web components that add to formData
+//
 // });
 
 // https://dev.to/gelopfalcon/service-worker-and-its-self-skipwaiting-44o5
@@ -477,42 +499,42 @@ const syncPathPattern = new URLPattern(
 
 const remoteScriptPattern = new URLPattern(
   `${BASEPATH}/remote/{:scriptId}.js`,
-  self.location.origin
+  self.location.origin,
 );
-
 
 self.addEventListener("fetch", async (event) => {
   let scriptMatch = remoteScriptPattern.exec(event.request.url);
 
   if (scriptMatch) {
-    event.respondWith((async () => {
-      const scriptId = scriptMatch.pathname.groups.scriptId;
-      const config = await get("config-json");
+    event.respondWith(
+      (async () => {
+        const scriptId = scriptMatch.pathname.groups.scriptId;
+        const config = await get("config-json");
 
-      // Find script URL from config
-      const scriptUrl = config.collections
-        .flatMap(c => c.fields)
-        .find(f => f.widget === scriptId)
-        ?.widgetUrl;
+        // Find script URL from config
+        const scriptUrl = config.collections
+          .flatMap((c) => c.fields)
+          .find((f) => f.widget === scriptId)?.widgetUrl;
 
-      if (!scriptUrl) {
-        return new Response('Script not found', { status: 404 });
-      }
+        if (!scriptUrl) {
+          return new Response("Script not found", { status: 404 });
+        }
 
-      // Try to get cached script
-      const cachedScript = await get(`script-${scriptId}`);
-      if (cachedScript) {
-        return new Response(cachedScript, {
-          headers: { 'Content-Type': 'application/javascript' }
-        });
-      }
+        // Try to get cached script
+        const cachedScript = await get(`script-${scriptId}`);
+        if (cachedScript) {
+          return new Response(cachedScript, {
+            headers: { "Content-Type": "application/javascript" },
+          });
+        }
 
         // Fetch and cache if not found
-      const script = await fetchAndCacheScript(scriptUrl, scriptId);
-      return new Response(script, {
-        headers: { 'Content-Type': 'application/javascript' }
-      });
-    })());
+        const script = await fetchAndCacheScript(scriptUrl, scriptId);
+        return new Response(script, {
+          headers: { "Content-Type": "application/javascript" },
+        });
+      })(),
+    );
     return;
   }
 });
@@ -522,10 +544,10 @@ self.addEventListener("fetch", async (event) => {
   let syncPathMatch = null;
 
   if (event.request.method === "POST") {
-    console.log('POST request to:', event.request.url);
+    console.log("POST request to:", event.request.url);
 
     if ((syncPathMatch = syncPathPattern.exec(event.request.url))) {
-      console.log('Handling sync request');
+      console.log("Handling sync request");
       event.respondWith(
         (async () => {
           try {
@@ -533,23 +555,27 @@ self.addEventListener("fetch", async (event) => {
             // Redirect back to the page they were on
             return Response.redirect(event.request.referrer || BASEPATH);
           } catch (error) {
-            console.error('Sync failed:', error);
+            console.error("Sync failed:", error);
             return Response.redirect(`${BASEPATH}?error=sync_failed`);
           }
-        })()
+        })(),
       );
       return;
     }
 
-    if ((collectionsPathMatch = collectionsPathPattern.exec(event.request.url))) {
-      console.log('Handling collections request');
+    if (
+      (collectionsPathMatch = collectionsPathPattern.exec(event.request.url))
+    ) {
+      console.log("Handling collections request");
       event.respondWith(
         (async () => {
           const formData = await event.request.formData();
           const content = await get("content-json");
-          const collectionName = collectionsPathMatch.pathname.groups.collectionName;
+          const collectionName =
+            collectionsPathMatch.pathname.groups.collectionName;
           const itemId = collectionsPathMatch.pathname.groups.id;
-          const isDeleteAction = (collectionsPathMatch.pathname.groups.action === "delete");
+          const isDeleteAction =
+            collectionsPathMatch.pathname.groups.action === "delete";
 
           let items = content.collections[collectionName] || [];
           const currentItemIndex = items.findIndex(({ id }) => id === itemId);
@@ -562,8 +588,9 @@ self.addEventListener("fetch", async (event) => {
             const now = Date.now();
             const item = {
               id: itemId || `${Math.random().toString(36).slice(2, 9)}`,
-              createdAt: currentItemIndex > -1 ? items[currentItemIndex].createdAt : now,
-              modifiedAt: now
+              createdAt:
+                currentItemIndex > -1 ? items[currentItemIndex].createdAt : now,
+              modifiedAt: now,
             };
 
             for (const [key, value] of formData.entries()) {
@@ -587,14 +614,14 @@ self.addEventListener("fetch", async (event) => {
             // Update last-sync-time after successful sync
             await set("last-sync-time", Date.now());
           } catch (error) {
-            console.error('Auto-sync failed:', error);
+            console.error("Auto-sync failed:", error);
             // Continue with redirect even if sync fails
           }
 
           return Response.redirect(
             `${BASEPATH}/collections/${collectionName}/`,
           );
-        })()
+        })(),
       );
       return;
     }
@@ -617,12 +644,12 @@ self.addEventListener(
 self.addEventListener(
   "message",
   async function serviceWorkerOnConfigMessage({ data }) {
+    console.log("wrote config to indexeddb");
     if (data.event === "config") {
       await set("config", data.config);
     }
   },
 );
-
 
 // IMPORTANT:
 // enable swtl router only after any other own fetch listeners,
@@ -638,7 +665,7 @@ async function syncToGithub() {
   try {
     const octokit = await getOctokit();
     const localContent = await get("content-json");
-    const cmsConfig = await get('config');
+    const cmsConfig = await get("config");
 
     // Get current remote content
     const { data: currentFile } = await octokit.repos.getContent({
@@ -657,7 +684,7 @@ async function syncToGithub() {
     const mergedDeletedIds = {};
     const allDeletedIds = new Set([
       ...Object.keys(localContent.deletedIds),
-      ...Object.keys(remoteContent.deletedIds)
+      ...Object.keys(remoteContent.deletedIds),
     ]);
 
     for (const id of allDeletedIds) {
@@ -669,7 +696,7 @@ async function syncToGithub() {
     // Create merged content with the combined deletedIds
     const contentToSync = mergeContents(
       { ...localContent, deletedIds: mergedDeletedIds },
-      { ...remoteContent, deletedIds: mergedDeletedIds }
+      { ...remoteContent, deletedIds: mergedDeletedIds },
     );
 
     // Ensure the merged content includes the deletedIds
@@ -677,9 +704,9 @@ async function syncToGithub() {
 
     // Clean up items that are in deletedIds
     for (const collectionName in contentToSync.collections) {
-      contentToSync.collections[collectionName] = contentToSync.collections[collectionName].filter(
-        item => !contentToSync.deletedIds[item.id]
-      );
+      contentToSync.collections[collectionName] = contentToSync.collections[
+        collectionName
+      ].filter((item) => !contentToSync.deletedIds[item.id]);
     }
 
     // Upload the merged content
@@ -689,15 +716,14 @@ async function syncToGithub() {
       path: "content.json",
       message: `Content update ${new Date().toISOString()}`,
       content: b64EncodeUnicode(JSON.stringify(contentToSync, null, 2)),
-      sha: currentFile.sha
+      sha: currentFile.sha,
     });
 
     // Update local state with merged content
     await set("content-json", contentToSync);
     await set("last-sync-time", Date.now());
-
   } catch (error) {
-    console.error('Sync failed:', error);
+    console.error("Sync failed:", error);
     throw error; // Re-throw to handle in the calling function
   }
 }
@@ -705,14 +731,14 @@ async function syncToGithub() {
 // Add this function to handle initial script fetching
 async function prefetchWidgetScripts(config) {
   const scripts = config.collections
-    .flatMap(c => c.fields)
-    .filter(f => f.widget && f.widgetUrl)
-    .map(f => ({
+    .flatMap((c) => c.fields)
+    .filter((f) => f.widget && f.widgetUrl)
+    .map((f) => ({
       id: f.widget,
-      url: f.widgetUrl
+      url: f.widgetUrl,
     }));
 
-  console.log('Prefetching widget scripts:', scripts);
+  console.log("Prefetching widget scripts:", scripts);
 
   for (const script of scripts) {
     try {
