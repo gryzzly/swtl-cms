@@ -3,7 +3,7 @@ import { Html } from "./pages/Html.js";
 import { Octokit } from "@octokit/rest";
 import "urlpattern-polyfill";
 
-import { set, get, clear } from "./vendor/idb-keyval.js";
+import { set, get, del } from "./vendor/idb-keyval.js";
 
 // TODOS:
 // - [x] Add simple image field
@@ -42,7 +42,7 @@ function escapeHTML(html) {
              .replace(/'/g, '&#039;');
 }
 
-function mergeContents(localContent, remoteContent) {
+function mergeContents(localContent = {}, remoteContent = {}) {
   // Initialize merged content structure
   const mergedContent = {
     collections: {},
@@ -76,8 +76,8 @@ function mergeContents(localContent, remoteContent) {
 
   // Merge each collection
   for (const collectionName of allCollectionNames) {
-    const localItems = localContent.collections[collectionName] || [];
-    const remoteItems = remoteContent.collections[collectionName] || [];
+    const localItems = localContent.collections?.[collectionName] || [];
+    const remoteItems = remoteContent.collections?.[collectionName] || [];
 
     const itemsMap = new Map();
 
@@ -254,17 +254,16 @@ const router = new Router({
                 repo: cmsConfig.githubRepo,
                 path: GITHUB_CONFIG.paths.config,
               });
-              const config = JSON.parse(b64DecodeUnicode(configFile.data.content));
-              await set(
-                "config-json",
-                config
+              const config = JSON.parse(
+                b64DecodeUnicode(configFile.data.content),
               );
+              await set("config-json", config);
               // Prefetch widget scripts after config is loaded
               await prefetchWidgetScripts(config);
             } catch (e) {
               if (e.message.includes("Bad credentials")) {
-                clear();
-                return Response.redirect(BASEPATH);
+                del("token");
+                // return Response.redirect(BASEPATH);
               }
               console.error(e);
               console.error("Create a config file!");
