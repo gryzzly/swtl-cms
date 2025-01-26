@@ -586,7 +586,9 @@ self.addEventListener("fetch", async (event) => {
             content.deletedIds[itemId] = Date.now();
           } else {
             const now = Date.now();
-            const item = {
+            let item = currentItemIndex > -1 ? items[currentItemIndex] : {};
+            item = {
+              ...item,
               id: itemId || `${Math.random().toString(36).slice(2, 9)}`,
               createdAt:
                 currentItemIndex > -1 ? items[currentItemIndex].createdAt : now,
