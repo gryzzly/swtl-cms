@@ -673,7 +673,7 @@ async function syncToGithub() {
     const { data: currentFile } = await octokit.repos.getContent({
       owner: cmsConfig.githubUser,
       repo: cmsConfig.githubRepo,
-      path: "content.json",
+      path: cmsConfig.contentFile || GITHUB_CONFIG.paths.content,
     });
 
     const remoteContent = JSON.parse(b64DecodeUnicode(currentFile.content));
@@ -715,7 +715,7 @@ async function syncToGithub() {
     await octokit.repos.createOrUpdateFileContents({
       owner: cmsConfig.githubUser,
       repo: cmsConfig.githubRepo,
-      path: "content.json",
+      path: cmsConfig.contentFile || GITHUB_CONFIG.paths.content,
       message: `Content update ${new Date().toISOString()}`,
       content: b64EncodeUnicode(JSON.stringify(contentToSync, null, 2)),
       sha: currentFile.sha,
