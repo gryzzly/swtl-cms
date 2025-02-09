@@ -258,7 +258,7 @@ const router = new Router({
               const configFile = await octokit.repos.getContent({
                 owner: cmsConfig.githubUser,
                 repo: cmsConfig.githubRepo,
-                path: GITHUB_CONFIG.paths.config,
+                path: cmsConfig.configFile || GITHUB_CONFIG.paths.config,
               });
               const config = JSON.parse(
                 b64DecodeUnicode(configFile.data.content),
@@ -278,7 +278,7 @@ const router = new Router({
               const contentFile = await octokit.repos.getContent({
                 owner: cmsConfig.githubUser,
                 repo: cmsConfig.githubRepo,
-                path: GITHUB_CONFIG.paths.content,
+                path: cmsConfig.contentFile || GITHUB_CONFIG.paths.content,
               });
               const remoteContent = JSON.parse(
                 b64DecodeUnicode(contentFile.data.content),
