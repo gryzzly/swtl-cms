@@ -129,6 +129,14 @@ function selectWidget(field, fieldKey, currentItem) {
           name="${field.name}"
           value="${dateValue}"
         />`;
+    case "boolean":
+      return `
+        <input
+          type="checkbox"
+          id="${fieldKey}"
+          name="${field.name}"
+          value="${value}"
+        />`;
   }
 
   // If it's a custom widget return the element
