@@ -306,9 +306,33 @@ const router = new Router({
       ],
       render: async ({ params, query, request }) => {
         const config = await get("config-json");
+        const lastEditedCollectionName =
+          (await get("last-edited-collection")) || config.collections[0]?.name;
+        const collectionConfig = config.collections.find(
+          ({ name }) => lastEditedCollectionName === name,
+        );
 
         return html`
           <${Html} title="Start" basePath=${BASEPATH}>
+            <style>
+              .new-item-control {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 100;
+              }
+            </style>
+
+            <!-- New Item Dropdown -->
+            <div class="new-item-control">
+              <button>
+                <a
+                  href="${BASEPATH}/collections/${lastEditedCollectionName}/new"
+                  >Add to ${collectionConfig.label}</a
+                >
+              </button>
+            </div>
+
             <${SyncStatus} />
             ${config.collections.map(({ name, label }) => {
               return `<div><a href="${BASEPATH}/collections/${name}/"><button>${label}</button></a></div>`;
@@ -617,6 +641,10 @@ self.addEventListener("fetch", async (event) => {
           content.collections[collectionName] = items;
           content.lastModified = Date.now();
           await set("content-json", content);
+          if (!isDeleteAction) {
+            // After successfully saving the item
+            await set("last-edited-collection", collectionName);
+          }
 
           // If we're online, sync before redirecting
           try {
