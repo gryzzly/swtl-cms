@@ -388,7 +388,13 @@ const router = new Router({
           ({ name }) => collectionName === name,
         );
         const scripts = collectionConfig.fields
-          .map(({ widgetUrl, widget }) => (widgetUrl ? widget : null))
+          .map(({ widgetUrl, widget }) =>
+            widgetUrl
+              ? widgetUrl.includes("localhost")
+                ? widgetUrl
+                : widget
+              : null,
+          )
           .filter((w) => w);
 
         return html`<${Html}
@@ -437,7 +443,13 @@ const router = new Router({
         const items = content.collections[collectionName] || [];
         const currentItem = items.find(({ id }) => id === params.itemId);
         const scripts = collectionConfig.fields
-          .map(({ widgetUrl, widget }) => (widgetUrl ? widget : null))
+          .map(({ widgetUrl, widget }) =>
+            widgetUrl
+              ? widgetUrl.includes("localhost")
+                ? widgetUrl
+                : widget
+              : null,
+          )
           .filter((w) => w);
 
         return html`<${Html} title="editing" basePath="${BASEPATH} scripts="${scripts}">
@@ -693,12 +705,38 @@ self.addEventListener(
 // enable swtl router only after any other own fetch listeners,
 // so that "API" POST requests are handled first
 self.addEventListener("fetch", async (event) => {
-  if (event.request.mode === "navigate") {
+  const url = new URL(event.request.url);
+
+  const staticFileExtensions = [
+    ".css",
+    ".js",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".mp3",
+    ".mp4",
+    ".webp",
+    ".webm",
+  ];
+
+  // Check if the request is for a static file
+  const isStaticFile = staticFileExtensions.some((ext) =>
+    url.pathname.endsWith(ext),
+  );
+
+  if (event.request.mode === "navigate" && !isStaticFile) {
     event.respondWith(router.handleRequest(event.request));
   }
 });
 
-// Update the sync function to use merging
 async function syncToGithub() {
   try {
     const octokit = await getOctokit();
@@ -779,6 +817,10 @@ async function prefetchWidgetScripts(config) {
   console.log("Prefetching widget scripts:", scripts);
 
   for (const script of scripts) {
+    // do not prefetch localhost scripts
+    if (script.url.includes("localhost")) {
+      continue;
+    }
     try {
       // Check if already cached
       const cached = await get(`script-${script.id}`);

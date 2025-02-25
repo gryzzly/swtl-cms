@@ -1,6 +1,12 @@
 import { html } from "swtl";
 
-export function Html({ children, title, basePath = '', styles = [], scripts = [] }) {
+export function Html({
+  children,
+  title,
+  basePath = "",
+  styles = [],
+  scripts = [],
+}) {
   return html`
     <html lang="en">
       <head>
@@ -55,9 +61,14 @@ export function Html({ children, title, basePath = '', styles = [], scripts = []
           }
         </style>
 
-        ${scripts.map(script => `
-          <script type="module" src="${basePath}/remote/${script}.js"></script>
-        `).join('')}
+        ${scripts
+          .map((script) => {
+            if (script.includes("localhost")) {
+              return `<script type="module" src="${script}"></script>`;
+            }
+            return `<script type="module" src="${basePath}/remote/${script}.js"></script>`;
+          })
+          .join("")}
 
         <title>${title ?? ""}</title>
         <style>
