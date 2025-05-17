@@ -2,7 +2,17 @@
 
 A lightweight CMS that works entirely in the browser using Service Workers and GitHub as a backend.
 
+The main features of this CMS are:
+- declarative configuration for content (collections of items with custom fields)
+- easy extensibility of default content types – create a standard web-component
+  that implements ElementInternals and uses [`setFormValue`](https://developer.mozilla.org/en-US/docs/Web/API/ElementInternals/setFormValue)
+  when value is updated
+
 ## Quick Start
+
+Use the a starter template https://github.com/gryzzly/swtl-cms-starter
+
+or:
 
 1. Clone this repository:
 
