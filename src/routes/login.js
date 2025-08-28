@@ -1,16 +1,20 @@
 import { html } from "swtl";
 import { get } from "../vendor/idb-keyval.js";
 
-export function loginRoute(
-  basePath,
-  { Html, SyncStatus, contentManager, widgetManager, authManager },
-) {
+export function loginRoute({
+  Html,
+  SyncStatus,
+  contentManager,
+  widgetManager,
+  authManager,
+}) {
   return {
     path: "/login",
     plugins: [
       {
         name: "auth-plugin",
         async beforeResponse({ url, query, params, request }) {
+          const basePath = await get("basePath");
           const token = await get("token");
           if (token) {
             return Response.redirect(basePath);
@@ -18,7 +22,8 @@ export function loginRoute(
         },
       },
     ],
-    render: () => {
+    render: async () => {
+      const basePath = await get("basePath");
       return html` <${Html} title="swtl" basePath="${basePath}">
         <div class="authorise view view-active">
           <style>

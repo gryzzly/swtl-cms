@@ -2,15 +2,12 @@ import { html } from "swtl";
 import { get } from "../vendor/idb-keyval.js";
 import { selectWidget } from "../utils/widget-utils.js";
 
-export function newItemRoute(
-  basePath,
-  { Html, SyncStatus, contentManager, widgetManager, authManager },
-) {
+export function newItemRoute({ Html, SyncStatus, contentManager }) {
   return {
     path: `/collections/:collectionName/new`,
     render: async function ({ params }) {
       performance.mark("get-db");
-      const content = await get("content-json");
+      const basePath = await get("basepath");
       const config = await get("config-json");
       performance.mark("got-db");
       console.log(

@@ -1,13 +1,17 @@
 import { html } from "swtl";
 import { get } from "../vendor/idb-keyval.js";
 
-export function collectionListRoute(
-  basePath,
-  { Html, SyncStatus, contentManager, widgetManager, authManager },
-) {
+export function collectionListRoute({
+  Html,
+  SyncStatus,
+  contentManager,
+  widgetManager,
+  authManager,
+}) {
   return {
     path: `/collections/:collectionName/`,
     render: async function ({ url, query, params, request }) {
+      const basePath = await get("basepath");
       const content = await get("content-json");
       const config = await get("config-json");
       const collectionName = params.collectionName;

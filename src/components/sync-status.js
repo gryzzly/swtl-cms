@@ -1,9 +1,10 @@
-// components/SyncStatus.js
 import { html } from "swtl";
+import { get } from "../vendor/idb-keyval.js";
 
-export async function SyncStatus({ contentManager, basePath }) {
-  const lastSyncTime = (await contentManager.getStore("last-sync-time")) || 0;
+export async function SyncStatus({ contentManager }) {
+  const lastSyncTime = (await get("last-sync-time")) || 0;
   const hasLocalChanges = await contentManager.hasLocalChanges();
+  const basePath = await get("basepath");
 
   return html`<style>
       .sync-status {

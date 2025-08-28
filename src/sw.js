@@ -1,4 +1,3 @@
-// sw.js - Main Service Worker file
 import { html, Router } from "swtl";
 import { Octokit } from "@octokit/rest";
 import "urlpattern-polyfill";
@@ -6,7 +5,7 @@ import { set, get, del } from "./vendor/idb-keyval.js";
 import { b64EncodeUnicode, b64DecodeUnicode } from "./utils.js";
 
 // Import modularized components
-import { ContentManager } from "./services/content-manager.js";
+import { getContentManager } from "./services/content-manager.js";
 import { WidgetManager } from "./services/widget-manager.js";
 import { GithubSync } from "./services/github-sync.js";
 import { Auth } from "./services/auth.js";
@@ -26,8 +25,10 @@ const GITHUB_CONFIG = {
 // Get base path for the service worker
 const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, "");
 
+set("basepath", BASEPATH);
+
 // Initialize service managers
-const contentManager = new ContentManager(get, set);
+const contentManager = getContentManager();
 const widgetManager = new WidgetManager(get, set, BASEPATH);
 const authManager = new Auth(get, set, del);
 
@@ -61,7 +62,7 @@ const apiHandlers = new ApiHandlers({
 // Create router with all routes
 const router = new Router({
   baseHref: BASEPATH,
-  routes: generateRoutes(BASEPATH, {
+  routes: generateRoutes({
     Html,
     SyncStatus,
     contentManager,

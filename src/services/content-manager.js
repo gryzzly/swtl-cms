@@ -1,19 +1,10 @@
+import { set, get, del } from "../vendor/idb-keyval.js";
+
 /**
  * Manages content collections with CRUD operations and sync capabilities
  */
-export class ContentManager {
-  /**
-   * @param {Function} getStore - Function to retrieve data from store
-   * @param {Function} setStore - Function to save data to store
-   */
-  constructor(getStore, setStore) {
-    if (typeof getStore !== "function" || typeof setStore !== "function") {
-      throw new Error(
-        "ContentManager requires valid getStore and setStore functions",
-      );
-    }
-    this.getStore = getStore;
-    this.setStore = setStore;
+class ContentManager {
+  constructor() {
     this.storeKey = "content-json";
     this.syncTimeKey = "last-sync-time";
   }
@@ -35,7 +26,7 @@ export class ContentManager {
    * @returns {Promise<Object>} Content object with collections and deletedIds
    */
   async getContent() {
-    const content = await this.getStore(this.storeKey);
+    const content = await get(this.storeKey);
     return content || this.createDefaultContent();
   }
 
@@ -117,7 +108,7 @@ export class ContentManager {
     }
 
     content.lastModified = timestamp;
-    await this.setStore(this.storeKey, content);
+    await set(this.storeKey, content);
     return content;
   }
 
@@ -208,7 +199,7 @@ export class ContentManager {
    * @returns {Promise<boolean>} True if there are unsynchronized changes
    */
   async hasLocalChanges() {
-    const lastSyncTime = (await this.getStore(this.syncTimeKey)) || 0;
+    const lastSyncTime = (await get(this.syncTimeKey)) || 0;
     const content = await this.getContent();
 
     // Check if anything was modified after the last sync
@@ -230,7 +221,7 @@ export class ContentManager {
    */
   async updateSyncTime() {
     const timestamp = Date.now();
-    await this.setStore(this.syncTimeKey, timestamp);
+    await set(this.syncTimeKey, timestamp);
     return timestamp;
   }
 
@@ -239,6 +230,16 @@ export class ContentManager {
    * @returns {Promise<void>}
    */
   async clearAllData() {
-    await this.setStore(this.storeKey, this.createDefaultContent());
+    await set(this.storeKey, this.createDefaultContent());
   }
+}
+
+// Singleton instance
+let instance = null;
+
+export function getContentManager() {
+  if (!instance) {
+    instance = new ContentManager();
+  }
+  return instance;
 }

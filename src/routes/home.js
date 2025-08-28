@@ -2,17 +2,23 @@
 import { html } from "swtl";
 import { Octokit } from "@octokit/rest";
 import { b64DecodeUnicode } from "../utils.js";
+import { Collections } from "../components/collections.js";
+import { get, set as setStore } from "../vendor/idb-keyval.js";
 
-export function homeRoute(
-  basePath,
-  { Html, SyncStatus, contentManager, widgetManager, authManager },
-) {
+export function homeRoute({
+  Html,
+  SyncStatus,
+  contentManager,
+  widgetManager,
+  authManager,
+}) {
   return {
     path: "/",
     plugins: [
       {
         name: "auth-plugin",
         async beforeResponse({ url, query, params, request }) {
+          const basePath = await get("basepath");
           const token = await authManager.getToken();
           if (!token) {
             return Response.redirect(`${basePath}/login`);
@@ -21,7 +27,7 @@ export function homeRoute(
           try {
             // Setup GitHub sync logic
             const octokit = new Octokit({ auth: token });
-            const cmsConfig = await contentManager.getStore("config");
+            const cmsConfig = await get("config");
 
             // Fetch and store config
             try {
@@ -33,8 +39,7 @@ export function homeRoute(
               const config = JSON.parse(
                 b64DecodeUnicode(configFile.data.content),
               );
-              await contentManager.setStore("config-json", config);
-
+              await setStore("config-json", config);
               // Prefetch widget scripts after config is loaded
               await widgetManager.prefetchWidgetScripts(config);
             } catch (e) {
@@ -54,14 +59,17 @@ export function homeRoute(
               const remoteContent = JSON.parse(
                 b64DecodeUnicode(contentFile.data.content),
               );
+              // FIXME: ugly that we are using stores directly and also
+              // use this strange wrapper (apparently a get here will also create
+              // empty entries if there is no content)
               const localContent = await contentManager.getContent();
 
               const mergedContent = contentManager.mergeContents(
                 localContent,
                 remoteContent,
               );
-              await contentManager.setStore("last-sync-time", Date.now());
-              await contentManager.setStore("content-json", mergedContent);
+              await setStore("last-sync-time", Date.now());
+              await setStore("content-json", mergedContent);
             } catch (e) {
               console.error("Content sync error:", e);
             }
@@ -72,10 +80,11 @@ export function homeRoute(
       },
     ],
     render: async ({ params, query, request }) => {
-      const config = await contentManager.getStore("config-json");
-      const lastEditedCollectionName =
-        (await contentManager.getStore("last-edited-collection")) ||
-        config.collections[0]?.name;
+      const config = await get("config-json");
+      const basePath = await get("basepath");
+      const lastEditedCollectionName = await ((await get(
+        "last-edited-collection",
+      )) || config.collections[0]?.name);
 
       const collectionConfig = config.collections.find(
         ({ name }) => lastEditedCollectionName === name,
@@ -106,9 +115,8 @@ export function homeRoute(
             contentManager=${contentManager}
             basePath=${basePath}
           />
-          ${config.collections.map(({ name, label }) => {
-            return `<div><a href="${basePath}/collections/${name}/"><button>${label}</button></a></div>`;
-          })}
+
+          <${Collections} />
         <//>
       `;
     },

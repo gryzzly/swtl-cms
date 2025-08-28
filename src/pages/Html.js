@@ -92,6 +92,8 @@ export function Html({
           p {
             margin-bottom: 0.5em;
           }
+
+          // FIXME: all prosemirror styles should be included as part of the widget
           .ProseMirror p {
             margin-bottom: 0;
             margin-block: 0;

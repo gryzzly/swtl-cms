@@ -54,4 +54,12 @@ pnpm dev
 /admin/src/ # Source files
 ```
 
+Entry point to the admin application is in the service worker – src/sw.js.
 
+Since service worker is a bit of a special thing, let’s detail the setup:
+
+- User visits the /admin path
+- The default HTML file (dist/admin/index.html) is statically served
+- That HTML file has basic settings / service worker bootstraping code
+- After service worker is loaded the page is reloaded and the route handlers
+of the admin applkication take over, taking user to /admin/login for authorization
