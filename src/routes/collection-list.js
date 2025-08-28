@@ -9,6 +9,21 @@ export function collectionListRoute({
   authManager,
 }) {
   return {
+    plugins: [
+      {
+        name: "collection-list-redirect",
+        async beforeResponse({ url, query, params, request }) {
+          const config = await get("config-json");
+          const basePath = await get("basepath");
+          const hasCollections = Boolean(config.collections.length);
+          const hasOneCollection = config.collections.length === 1;
+
+          if (hasCollections && hasOneCollection) {
+            return Response.redirect(`${basePath}`);
+          }
+        },
+      },
+    ],
     path: `/collections/:collectionName/`,
     render: async function ({ url, query, params, request }) {
       const basePath = await get("basepath");

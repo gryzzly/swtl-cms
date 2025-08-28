@@ -115,7 +115,7 @@ export function homeRoute({
             contentManager=${contentManager}
             basePath=${basePath}
           />
-
+          <!-- render list of all collections, or render 1 collection itself (or empty message) -->
           <${Collections} />
         <//>
       `;
