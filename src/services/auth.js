@@ -1,21 +1,23 @@
+import {
+  get as getStore,
+  set as setStore,
+  del as delStore,
+} from "../vendor/idb-keyval.js";
+
 // services/auth.js
 export class Auth {
-  constructor(getStore, setStore, delStore) {
-    this.getStore = getStore;
-    this.setStore = setStore;
-    this.delStore = delStore;
-  }
+  constructor(getStore, setStore, delStore) {}
 
   async getToken() {
-    return await this.getStore("token");
+    return await getStore("token");
   }
 
   async setToken(token) {
-    await this.setStore("token", token);
+    await setStore("token", token);
   }
 
   async clearToken() {
-    await this.delStore("token");
+    await delStore("token");
   }
 
   async isLoggedIn() {

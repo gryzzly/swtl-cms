@@ -1,10 +1,11 @@
+import { set as setStore } from "../vendor/idb-keyval.js";
+
 export class ApiHandlers {
   constructor(baseConfig) {
-    const { BASEPATH, contentManager, getGithubSync, set } = baseConfig;
+    const { BASEPATH, contentManager, getGithubSync } = baseConfig;
     this.BASEPATH = BASEPATH;
     this.contentManager = contentManager;
     this.getGithubSync = getGithubSync;
-    this.set = set;
 
     // Define URL patterns for routing
     this.collectionsPathPattern = new URLPattern(
@@ -65,7 +66,7 @@ export class ApiHandlers {
 
       await githubSync.syncToGithub();
       // Update last sync time
-      await this.set("last-sync-time", Date.now());
+      await setStore("last-sync-time", Date.now());
       // Redirect back to the page they were on
       return Response.redirect(event.request.referrer || this.BASEPATH);
     } catch (error) {
@@ -94,7 +95,7 @@ export class ApiHandlers {
 
       // Remember last edited collection
       if (!isDeleteAction) {
-        await this.set("last-edited-collection", collectionName);
+        await setStore("last-edited-collection", collectionName);
       }
 
       // If we're online, try to sync
@@ -102,7 +103,7 @@ export class ApiHandlers {
         const githubSync = await this.getGithubSync();
         if (githubSync) {
           await githubSync.syncToGithub();
-          await this.set("last-sync-time", Date.now());
+          await setStore("last-sync-time", Date.now());
         }
       } catch (error) {
         console.error("Auto-sync failed:", error);

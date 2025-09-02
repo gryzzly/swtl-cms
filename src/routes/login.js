@@ -23,7 +23,7 @@ export function loginRoute({
       },
     ],
     render: async () => {
-      const basePath = await get("basePath");
+      const basePath = await get("basepath");
       return html` <${Html} title="swtl" basePath="${basePath}">
         <div class="authorise view view-active">
           <style>
@@ -49,7 +49,8 @@ export function loginRoute({
                 event: "authorised",
                 token,
               });
-              location = "${basePath}";
+              // take user to the root of the admin app
+              window.location = "${basePath}";
             }
             window.addEventListener("message", onMessage);
           </script>

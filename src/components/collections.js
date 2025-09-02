@@ -6,6 +6,7 @@ import { get } from "../vendor/idb-keyval.js";
 export async function Collections() {
   const contentManager = getContentManager();
   const config = await get("config-json");
+  const basePath = await get("basepath");
   const hasCollections = Boolean(config.collections.length);
   const hasOneCollection = config.collections.length === 1;
 

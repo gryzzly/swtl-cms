@@ -1,8 +1,30 @@
+/**
+ * This is the JavaScript entry point of the application.
+ *
+ * Here’s how we get to execute its code:
+ * First, user loads the index.html file. This index.html is built from
+ * src/index.html.tpl in the github action. That file contains the setup
+ * code for initializing the service worker (registering the service worker
+ * and passing custom configuration).
+ *
+ * During the build, environment variables are replaced with the custom values –
+ *
+ * SWTL_CMS_GITHUB_USER
+ * SWTL_CMS_GITHUB_REPO
+ * SWTL_CMS_CONFIG_FILE
+ * SWTL_CMS_CONTENT_FILE
+ *
+ * This allows setting which repository will be used, and what file names
+ * to use for storing the config and the content. Github user  and repo *must*
+ * be set, the config and content have reasonable defaults, so can be omitted.
+ *
+ * Once the service worker code below is executed, the admin service worker will
+ * take over network events and manage the routing based on the CMS configuration.
+ */
 import { html, Router } from "swtl";
 import { Octokit } from "@octokit/rest";
 import "urlpattern-polyfill";
-import { set, get, del } from "./vendor/idb-keyval.js";
-import { b64EncodeUnicode, b64DecodeUnicode } from "./utils.js";
+import { set as setStore, get as getStore } from "./vendor/idb-keyval.js";
 
 // Import modularized components
 import { getContentManager } from "./services/content-manager.js";
@@ -14,23 +36,16 @@ import { generateRoutes } from "./routes/index.js";
 import { SyncStatus } from "./components/sync-status.js";
 import { Html } from "./pages/Html.js";
 
-// Configuration constants
-const GITHUB_CONFIG = {
-  paths: {
-    config: "config.json",
-    content: "content.json",
-  },
-};
-
 // Get base path for the service worker
 const BASEPATH = self.location.pathname.replace(/\/sw\.js$/, "");
 
-set("basepath", BASEPATH);
+// Save basepath for the components to use
+setStore("basepath", BASEPATH);
 
 // Initialize service managers
 const contentManager = getContentManager();
-const widgetManager = new WidgetManager(get, set, BASEPATH);
-const authManager = new Auth(get, set, del);
+const widgetManager = new WidgetManager();
+const authManager = new Auth();
 
 // Initialize Github sync service (with lazy initialization)
 let githubSyncInstance = null;
@@ -40,13 +55,8 @@ const getGithubSync = async () => {
     if (!token) return null;
 
     const octokit = new Octokit({ auth: token });
-    const config = await get("config");
-    githubSyncInstance = new GithubSync(
-      octokit,
-      config,
-      contentManager,
-      GITHUB_CONFIG,
-    );
+    const config = await getStore("config");
+    githubSyncInstance = new GithubSync(octokit, config, contentManager);
   }
   return githubSyncInstance;
 };
@@ -56,7 +66,6 @@ const apiHandlers = new ApiHandlers({
   BASEPATH,
   contentManager,
   getGithubSync,
-  set,
 });
 
 // Create router with all routes
@@ -76,6 +85,12 @@ self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
+/**
+ * SW activation handler:
+ * - Takes immediate control of all pages (claim)
+ * - Notifies all open tabs that SW is ready
+ * - Prevents SW termination until complete (waitUntil)
+ */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     clients.claim().then(() => {
@@ -113,10 +128,13 @@ self.addEventListener("fetch", async (event) => {
 
 // Message handlers for authorization and configuration
 self.addEventListener("message", async ({ data }) => {
+  // "authorised" is fired in routes/login.js in the
   if (data.event === "authorised") {
     await authManager.setToken(data.token);
     // Reset Github sync instance when token changes
     githubSyncInstance = null;
+    // "config" is fired within the "shell" index.html that installs the service
+    // worker, it passes the ENV variable values to the application
   } else if (data.event === "config") {
     await set("config", data.config);
     // Reset Github sync instance when config changes

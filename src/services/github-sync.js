@@ -2,11 +2,10 @@
 import { b64EncodeUnicode, b64DecodeUnicode } from "../utils.js";
 
 export class GithubSync {
-  constructor(octokit, config, contentManager, githubConfig) {
+  constructor(octokit, config, contentManager) {
     this.octokit = octokit;
     this.config = config;
     this.contentManager = contentManager;
-    this.githubConfig = githubConfig;
   }
 
   async fetchRemoteConfig() {
@@ -14,7 +13,7 @@ export class GithubSync {
       const configFile = await this.octokit.repos.getContent({
         owner: this.config.githubUser,
         repo: this.config.githubRepo,
-        path: this.config.configFile || this.githubConfig.paths.config,
+        path: this.config.configFile,
       });
 
       return JSON.parse(b64DecodeUnicode(configFile.data.content));
@@ -29,7 +28,7 @@ export class GithubSync {
       const contentFile = await this.octokit.repos.getContent({
         owner: this.config.githubUser,
         repo: this.config.githubRepo,
-        path: this.config.contentFile || this.githubConfig.paths.content,
+        path: this.config.contentFile,
       });
 
       return JSON.parse(b64DecodeUnicode(contentFile.data.content));
@@ -48,7 +47,7 @@ export class GithubSync {
       const { data: currentFile } = await this.octokit.repos.getContent({
         owner: this.config.githubUser,
         repo: this.config.githubRepo,
-        path: this.config.contentFile || this.githubConfig.paths.content,
+        path: this.config.contentFile,
       });
 
       const remoteContent = JSON.parse(b64DecodeUnicode(currentFile.content));
@@ -70,7 +69,7 @@ export class GithubSync {
       await this.octokit.repos.createOrUpdateFileContents({
         owner: this.config.githubUser,
         repo: this.config.githubRepo,
-        path: this.config.contentFile || this.githubConfig.paths.content,
+        path: this.config.contentFile,
         message: `Content update ${new Date().toISOString()}`,
         content: b64EncodeUnicode(JSON.stringify(contentToSync, null, 2)),
         sha: currentFile.sha,

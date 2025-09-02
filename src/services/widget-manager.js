@@ -1,15 +1,11 @@
+import { get as getStore, set as setStore } from "../vendor/idb-keyval.js";
+
 // services/widget-manager.js
 export class WidgetManager {
-  constructor(getStore, setStore, basePath) {
-    this.getStore = getStore;
-    this.setStore = setStore;
-    this.basePath = basePath;
-  }
-
   async handleScriptRequest(scriptMatch) {
     try {
       const scriptId = scriptMatch.pathname.groups.scriptId;
-      const config = await this.getStore("config-json");
+      const config = await getStore("config-json");
 
       // Find script URL from config
       const scriptUrl = config.collections
@@ -21,7 +17,7 @@ export class WidgetManager {
       }
 
       // Try to get cached script
-      const cachedScript = await this.getStore(`script-${scriptId}`);
+      const cachedScript = await getStore(`script-${scriptId}`);
       if (cachedScript) {
         return new Response(cachedScript, {
           headers: { "Content-Type": "application/javascript" },
@@ -51,7 +47,7 @@ export class WidgetManager {
       }
 
       const content = await response.text();
-      await this.setStore(`script-${scriptId}`, content);
+      await setStore(`script-${scriptId}`, content);
       return content;
     } catch (error) {
       console.error(`Error fetching script ${scriptId}:`, error);
@@ -78,7 +74,7 @@ export class WidgetManager {
 
       try {
         // Check if already cached
-        const cached = await this.getStore(`script-${script.id}`);
+        const cached = await getStore(`script-${script.id}`);
         if (!cached) {
           console.log(`Fetching script: ${script.id}`);
           await this.fetchAndCacheScript(script.url, script.id);

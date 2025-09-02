@@ -34,7 +34,7 @@ export function homeRoute({
               const configFile = await octokit.repos.getContent({
                 owner: cmsConfig.githubUser,
                 repo: cmsConfig.githubRepo,
-                path: cmsConfig.configFile || GITHUB_CONFIG.paths.config,
+                path: cmsConfig.configFile,
               });
               const config = JSON.parse(
                 b64DecodeUnicode(configFile.data.content),
@@ -48,13 +48,12 @@ export function homeRoute({
               }
               console.error("Config error:", e);
             }
-
             // Fetch and merge content
             try {
               const contentFile = await octokit.repos.getContent({
                 owner: cmsConfig.githubUser,
                 repo: cmsConfig.githubRepo,
-                path: cmsConfig.contentFile || GITHUB_CONFIG.paths.content,
+                path: cmsConfig.contentFile,
               });
               const remoteContent = JSON.parse(
                 b64DecodeUnicode(contentFile.data.content),

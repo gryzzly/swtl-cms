@@ -16,8 +16,8 @@
             SWTL_CMS_BASE_PATH = location.pathname.replace(/\/$/, '');
             SWTL_CMS_GITHUB_USER = "${SWTL_CMS_GITHUB_USER}";
             SWTL_CMS_GITHUB_REPO = "${SWTL_CMS_GITHUB_REPO}";
-            SWTL_CMS_CONFIG_FILE = "${SWTL_CMS_CONFIG_FILE}";
-            SWTL_CMS_CONTENT_FILE = "${SWTL_CMS_CONTENT_FILE}";
+            SWTL_CMS_CONFIG_FILE = "${SWTL_CMS_CONFIG_FILE}" || "swtl-cms-config.json";
+            SWTL_CMS_CONTENT_FILE = "${SWTL_CMS_CONTENT_FILE}" || "swtl-cms-content.json";
         </script>
         <script>
             /**

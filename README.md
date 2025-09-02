@@ -47,6 +47,16 @@ pnpm dev
 
 2. Make your changes in the `admin/src` folder
 3. The build will automatically update when you save changes
+4. To update which config is used during the development, after starting
+dev server, go to dist/index.html and replace the values in the config globals
+5. For development, we need to simulate the setting of the config, that normally
+happens during the CI action, specifically the following line:
+
+  envsubst < dist/admin/index.html.tmpl > dist/admin/index.html
+
+Here, we’ll need to manually copy the `dist/admin/index.html` file to the
+`dist/admin` folder and manualy replace the ENV variables with respective
+development values.
 
 ## Structure
 ```
