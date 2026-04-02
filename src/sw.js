@@ -136,7 +136,7 @@ self.addEventListener("message", async ({ data }) => {
     // "config" is fired within the "shell" index.html that installs the service
     // worker, it passes the ENV variable values to the application
   } else if (data.event === "config") {
-    await set("config", data.config);
+    await setStore("config", data.config);
     // Reset Github sync instance when config changes
     githubSyncInstance = null;
   }
